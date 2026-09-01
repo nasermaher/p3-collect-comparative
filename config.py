@@ -97,8 +97,8 @@ FIELD_MAP = {
 # ── Arabic character normalization ────────────────────────────────────────────
 # Translation table built once at module load — applied via C-level translate().
 #   • Eastern Arabic-Indic digits (U+0660–U+0669) → ASCII '0'–'9'
-#   • ف (U+06A4 = 1700) → '_'
-#   • RLM (U+200C = 8236)  → '_'
+#   • ڤ Veh (U+06A4 = 1700) → '_'
+#   • PDF — Pop Directional Formatting (U+202C = 8236) → '_'
 #   • Any codepoint > 65381 → '_'  (handled in chr_replace pre-pass)
 
 NORMALIZATION_TABLE = {

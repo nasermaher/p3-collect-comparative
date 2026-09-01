@@ -56,12 +56,12 @@ Different customers' Excel exports have different columns. A "profile" (`yalla`,
 Files are read and written as raw bytes (not text) because encoding (`cp1256`) must be controlled precisely and markers are matched as byte sequences:
 
 1. Scan each line for `CARD_MARKER` (`"%B`) — when found, slice bytes `[11:27]` and decode as the card ID.
-2. Scan for `END_MARKER` (`#END#`) — when found, strip the line's trailing CRLF, look up the card ID in the Excel DataFrame (indexed on `lookup_col` for O(1) lookup), and call `build_text()` to render the tagged field string for that profile, which gets spliced in right after the `#END#` line (via `seek`/`write`, replacing the stripped line-ending bytes).
+2. Scan for `END_MARKER` (`#END#`) — when found, strip the line's trailing CRLF, look up the card ID in the Excel DataFrame (indexed on `lookup_col` for O(1) lookup), and call `build_text()` to render the tagged field string for that profile, which gets written right after the CRLF-stripped `#END#` line (the output file is opened `'ab+'`, so every write lands at end-of-file — no `seek` is needed or used).
 3. A `KeyError` (card ID not in Excel, or a required column missing) skips that card with a warning rather than aborting the whole batch.
 
 ### Arabic text handling
 
-`config.NORMALIZATION_TABLE` + `utils._replaced` (the `chr_replace` processor) normalize Eastern Arabic-Indic digits to ASCII and map a couple of special codepoints (ف, RLM) to `_`; any codepoint above 65381 is also replaced with `_`. This matters because the target `.p3` format only supports `cp1256`-encodable output.
+`config.NORMALIZATION_TABLE` + `utils._replaced` (the `chr_replace` processor) normalize Eastern Arabic-Indic digits to ASCII and map a couple of special codepoints (ڤ Veh, PDF) to `_`; any codepoint above 65381 is also replaced with `_`. This matters because the target `.p3` format only supports `cp1256`-encodable output.
 
 ## Portability & settings
 

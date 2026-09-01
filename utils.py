@@ -27,7 +27,9 @@ log = logging.getLogger(__name__)
 # ── Value processors ──────────────────────────────────────────────────────────
 
 def _plain(val) -> str:
-    """Default processor — stringify without modification."""
+    """Default processor — stringify without modification. Empty for NaN/None."""
+    if pd.isna(val):
+        return ''
     return str(val)
 
 
@@ -43,13 +45,18 @@ def _replaced(string: str) -> str:
     Normalize Arabic characters in a string:
       1. Replace any char with codepoint > 65381 with '_' (pre-pass, list comp).
       2. Apply NORMALIZATION_TABLE via str.translate() (C-speed, single pass).
+    Empty for NaN/None.
     """
+    if pd.isna(string):
+        return ''
     pre_cleaned = ['_' if ord(c) > 65381 else c for c in string]
     return ''.join(pre_cleaned).translate(NORMALIZATION_TABLE)
 
 
 def _jpg(val) -> str:
-    """Processor: append .JPG extension."""
+    """Processor: append .JPG extension. Empty for NaN/None."""
+    if pd.isna(val):
+        return ''
     return str(val) + '.JPG'
 
 # ── Processor registry ────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ PROCESSOR_CHOICES = [
     ('Arabic character normalize', 'chr_replace'),
     ('Append .JPG extension', 'jpg'),
 ]
-PROCESSOR_LABELS = dict(PROCESSOR_CHOICES)
+PROCESSOR_LABELS = {key: label for label, key in PROCESSOR_CHOICES}
 PROCESSOR_KEYS = {label: key for label, key in PROCESSOR_CHOICES}
 
 COUNTER_SENTINEL = '__line_count__'
@@ -450,7 +450,8 @@ class P3CCApp(tk.Tk):
         self._last_output_path = Path(result['output_path'])
         self.results_var.set(
             f"Files processed : {result['file_count']}\n"
-            f"Cards processed : {result['total_card_count']}\n"
+            f"Cards read      : {result['total_card_count']}\n"
+            f"Cards written   : {result['total_card_count'] - result['skip_count']}\n"
             f"Cards skipped   : {result['skip_count']}\n"
             f"Elapsed time    : {result['elapsed']:.2f} seconds\n"
             f"Output file     : {result['output_path']}"

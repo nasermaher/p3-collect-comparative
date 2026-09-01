@@ -47,6 +47,8 @@ def load_settings() -> dict:
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError('settings.json is not a JSON object')
         merged = dict(DEFAULT_SETTINGS)
         merged.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
         return merged

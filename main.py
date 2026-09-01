@@ -89,7 +89,7 @@ def run_pipeline(
     log.info('Profile active: [%s]  |  Index key: [%s]', profile, lookup_col)
 
     # O(1) card lookups — index set once here, used inside the loop
-    excel.set_index(lookup_col, inplace=True)
+    excel.set_index(lookup_col, inplace=True, drop=False)
 
     # Loaded once per batch (not per card) — reflects any edits made in the
     # GUI's Manage Fields dialog since the last run, without needing a restart.
@@ -116,8 +116,6 @@ def run_pipeline(
 
                 for line in file_in:
 
-                    original_len = len(line)
-
                     # ── Detect card ID ────────────────────────────────────
                     if CARD_MARKER in line:
                         card_id = line[CARD_ID_START:CARD_ID_END].decode(ENCODING)
@@ -127,8 +125,6 @@ def run_pipeline(
                     is_end = END_MARKER in line
                     if is_end:
                         line = line.rstrip(b'\r\n')
-
-                    stripped = original_len - len(line)
 
                     # ── Append card data after END marker ─────────────────
                     if is_end:
@@ -143,11 +139,9 @@ def run_pipeline(
                             # Build & write
                             text = build_text(profile, excel_row, line_count, resolved_field_map)
 
-                            # ── Write source line to output ───────────────────────
+                            # ── Write source line (CRLF-stripped) then the injected tags ──
                             file_out.write(line)
-
-                            file_out.seek(file_out.tell() - stripped, 0)
-                            file_out.write(text.encode(ENCODING))
+                            file_out.write(text.encode(ENCODING, errors='replace'))
 
                         except KeyError as e:
                             # Catches missing card_id in Excel.loc or missing column in build_text (via resolve_col)
@@ -163,7 +157,7 @@ def run_pipeline(
     elapsed = time.time() - start_time
     log.info('─' * 55)
     log.info('Files processed : %d', file_count)
-    log.info('Cards processed : %d, Cards Skipped : %d', total_card_count, skip_count)
+    log.info('Cards read : %d, Cards written : %d, Cards skipped : %d', total_card_count, total_card_count - skip_count, skip_count)
     log.info('Elapsed time    : %.4f seconds', elapsed)
     log.info('─' * 55)
 
