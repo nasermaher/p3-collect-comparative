@@ -30,6 +30,19 @@ def get_app_dir() -> Path:
     return Path(__file__).parent
 
 
+def get_resource_path(filename: str) -> Path:
+    """
+    Directory for read-only files bundled into the build (e.g. README.md, via
+    P3CC.spec's `datas`) — PyInstaller's `sys._MEIPASS`, or this script's
+    folder in source mode. Distinct from get_app_dir(): that one is for
+    user-writable files that must sit next to the exe for the app folder to
+    stay portable; bundled resources live wherever PyInstaller placed them.
+    """
+    if getattr(sys, 'frozen', False):
+        return Path(sys._MEIPASS) / filename
+    return Path(__file__).parent / filename
+
+
 def _settings_path() -> Path:
     return get_app_dir() / SETTINGS_FILENAME
 

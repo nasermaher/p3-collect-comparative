@@ -5,7 +5,7 @@ a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('README.md', '.'), ('README-ar.md', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

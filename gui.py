@@ -10,12 +10,12 @@ import os
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 import field_map_store
 from exceptions import P3CCError
 from main import run_pipeline
-from settings import load_settings, save_settings
+from settings import get_resource_path, load_settings, save_settings
 from utils import select_file, load_excel
 
 log = logging.getLogger(__name__)
@@ -318,6 +318,56 @@ class FieldMapDialog(tk.Toplevel):
         self.destroy()
 
 
+class HelpDialog(tk.Toplevel):
+    """Shows the project's README content to end users who only ever see the
+    packaged .exe and have no other way to read it."""
+
+    _HEADING_FONT = ('Segoe UI', 12, 'bold')
+
+    def __init__(self, parent: tk.Tk):
+        super().__init__(parent)
+        self.title('Help')
+        self.geometry('700x600')
+        self.transient(parent)
+
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill='both', expand=True, padx=8, pady=8)
+        notebook.add(self._build_tab(notebook, 'README.md'), text='English')
+        notebook.add(self._build_tab(notebook, 'README-ar.md'), text='العربية')
+
+    def _build_tab(self, parent: ttk.Notebook, filename: str) -> ttk.Frame:
+        frame = ttk.Frame(parent)
+        text = scrolledtext.ScrolledText(frame, wrap='word', font=('Segoe UI', 10))
+        text.pack(fill='both', expand=True)
+        text.tag_configure('heading', font=self._HEADING_FONT)
+
+        try:
+            content = get_resource_path(filename).read_text(encoding='utf-8')
+        except OSError as e:
+            content = None
+            text.insert('end', f'Could not load {filename}: {e}')
+
+        if content is not None:
+            self._insert_readme(text, content)
+
+        text.config(state='disabled')
+        return frame
+
+    def _insert_readme(self, text: tk.Text, content: str) -> None:
+        """Render README markdown as plain readable text: bold '#' headings,
+        drop code-fence markers but keep their content. No full markdown
+        parsing — this is a help viewer, not a renderer."""
+        in_code_block = False
+        for line in content.splitlines():
+            if line.strip().startswith('```'):
+                in_code_block = not in_code_block
+                continue
+            if line.startswith('#') and not in_code_block:
+                text.insert('end', line.lstrip('#').strip() + '\n', 'heading')
+            else:
+                text.insert('end', line + '\n')
+
+
 class P3CCApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -357,6 +407,7 @@ class P3CCApp(tk.Tk):
         self.run_button.pack(side='left', padx=5)
         ttk.Button(btn_row, text='Settings', command=self._open_settings).pack(side='left', padx=5)
         ttk.Button(btn_row, text='Manage Fields', command=self._open_field_map).pack(side='left', padx=5)
+        ttk.Button(btn_row, text='Help', command=self._open_help).pack(side='left', padx=5)
 
         # Progress bar
         self.progress = ttk.Progressbar(frame, orient='horizontal', length=400, mode='determinate')
@@ -405,6 +456,9 @@ class P3CCApp(tk.Tk):
 
     def _open_field_map(self):
         FieldMapDialog(self)
+
+    def _open_help(self):
+        HelpDialog(self)
 
     def _open_output_folder(self):
         if self._last_output_path is not None:
