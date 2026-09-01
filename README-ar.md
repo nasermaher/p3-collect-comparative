@@ -145,7 +145,7 @@ p3cc/
 ├── P3CC.spec              # مواصفات بناء PyInstaller (مُثبَّتة في المستودع — تحافظ على إصلاحات الاستيراد الخفي)
 ├── requirements.txt       # تبعيات التشغيل
 ├── requirements-dev.txt   # تبعيات التشغيل + PyInstaller (لبناء المِلَفّ التنفيذي)
-├── run.bat                # خاص بالمطورين فقط: يُفعِّل .venv ثم يشغل python main.py
+├── run.bat                # خاص بالمطورين فقط: يُفعِّل .venv ثم يشغل python app.py مباشرة
 ├── toolkit.bat            # غلاف بقائمة تفاعلية: run / test / check / setup / package
 └── README.md              # هذه الوثائق
 ```

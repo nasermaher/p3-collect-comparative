@@ -145,7 +145,7 @@ p3cc/
 ├── P3CC.spec              # PyInstaller build spec (committed — preserves hidden-import fixes)
 ├── requirements.txt       # Runtime dependencies
 ├── requirements-dev.txt   # Runtime deps + PyInstaller (for building the exe)
-├── run.bat                # Dev-only: activates .venv, runs python main.py
+├── run.bat                # Dev-only: activates .venv, quick-launches python app.py
 ├── toolkit.bat            # Menu-driven wrapper: run / test / check / setup / package
 └── README.md              # This documentation
 ```

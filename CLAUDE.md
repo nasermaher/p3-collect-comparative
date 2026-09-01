@@ -17,7 +17,7 @@ python main.py                              # minimal console entry point, for d
 pytest                                       # run the unit test suite (tests/)
 pyinstaller P3CC.spec                       # rebuild dist/P3CC/P3CC.exe from the committed spec (preferred — preserves hidden-import fixes)
 pyinstaller --windowed --name P3CC app.py   # regenerates P3CC.spec from scratch; only do this deliberately, then re-commit the spec
-run.bat                                     # dev-only: activates .venv then runs python main.py
+run.bat                                     # dev-only: activates .venv then runs python app.py (quick launch — same as toolkit.bat's "Run" option)
 toolkit.bat                                 # menu-driven wrapper: run/test/check/setup/package (see toolkit.bat itself)
 ```
 
