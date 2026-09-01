@@ -129,7 +129,11 @@ if errorlevel 1 (
     goto end
 )
 
-for /f "delims=" %%v in ('"%PY%" -c "import config; print(config.VERSION)"') do set "VERSION=%%v"
+set "VERSION_FILE=%TEMP%\p3cc_version_%RANDOM%.tmp"
+"%PY%" -c "import config; print(config.VERSION)" > "%VERSION_FILE%"
+set "VERSION="
+set /p VERSION=<"%VERSION_FILE%"
+del "%VERSION_FILE%" >nul 2>&1
 if not defined VERSION set "VERSION=unknown"
 set "ZIP_NAME=P3CC-v%VERSION%-portable.zip"
 
