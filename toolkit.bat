@@ -10,7 +10,7 @@ rem  Double-click it for a menu, or call it with a command:
 rem
 rem      toolkit setup      create .venv and install everything
 rem      toolkit run        start the GUI (app.py)
-rem      toolkit test       there is no automated test suite yet — says so
+rem      toolkit test       run the pytest suite (tests/)
 rem      toolkit check      what this machine can and cannot run
 rem      toolkit package    build the portable P3CC.exe + zip it
 rem
@@ -83,7 +83,7 @@ if errorlevel 1 (
 )
 echo.
 echo Setup finished. Checking what the machine can run:
-"%~dp0.venv\Scripts\python.exe" -c "import sys,platform,importlib.util as u; print('Python  :', sys.version.split()[0]); print('Arch    :', platform.architecture()[0]); mods=['tkinter','pandas','openpyxl','xlrd','PyInstaller']; [print(f'{m:11}:', 'OK' if u.find_spec(m) else 'MISSING') for m in mods]"
+"%~dp0.venv\Scripts\python.exe" -c "import sys,platform,importlib.util as u; print('Python  :', sys.version.split()[0]); print('Arch    :', platform.architecture()[0]); mods=['tkinter','pandas','openpyxl','xlrd','PyInstaller','pytest']; [print(f'{m:11}:', 'OK' if u.find_spec(m) else 'MISSING') for m in mods]"
 goto end
 
 rem ---------------------------------------------------------------------------
@@ -93,21 +93,29 @@ goto end
 
 rem ---------------------------------------------------------------------------
 :test
-echo There is no automated test suite in this project yet (see CLAUDE.md —
-echo test.py is a scratch file, not real tests). To verify a change by hand,
-echo run "toolkit run" and process a sample folder/Excel pair, then compare
-echo the output .p3 and p3cc.log against a known-good run.
+"%PY%" -m pytest -q
+if errorlevel 1 set "EXITCODE=1"
+echo.
+echo Note: this only covers utils.py/settings.py/field_map_store.py's pure
+echo logic (see tests\). It does not exercise main.py's actual .p3/Excel I/O —
+echo verify that by hand with "toolkit run" against sample data.
 goto end
 
 rem ---------------------------------------------------------------------------
 :check
-"%PY%" -c "import sys,platform,importlib.util as u; print('Python  :', sys.version.split()[0]); print('Arch    :', platform.architecture()[0]); mods=['tkinter','pandas','openpyxl','xlrd','PyInstaller']; [print(f'{m:11}:', 'OK' if u.find_spec(m) else 'MISSING') for m in mods]"
+"%PY%" -c "import sys,platform,importlib.util as u; print('Python  :', sys.version.split()[0]); print('Arch    :', platform.architecture()[0]); mods=['tkinter','pandas','openpyxl','xlrd','PyInstaller','pytest']; [print(f'{m:11}:', 'OK' if u.find_spec(m) else 'MISSING') for m in mods]"
 if errorlevel 1 set "EXITCODE=1"
 goto end
 
 rem ---------------------------------------------------------------------------
 :package
-rem No automated test suite exists (see :test) — build straight from source.
+rem The tests run first: a package that fails its own tests is not worth carrying.
+"%PY%" -m pytest -q
+if errorlevel 1 (
+    echo Tests failed — packaging stopped. Fix them first.
+    set "EXITCODE=1"
+    goto end
+)
 if not exist "%~dp0.venv\Scripts\pyinstaller.exe" (
     echo PyInstaller is not installed in .venv — run "toolkit setup" first.
     set "EXITCODE=1"

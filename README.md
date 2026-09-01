@@ -2,85 +2,87 @@
 
 ## Overview
 
-P3CC is a Python-based utility designed to process `.p3` files and enrich them with data from Excel spreadsheets. It automates the collection and comparison of card-related information, integrating details like cardholder names, national IDs, mobile numbers, and other profile-specific data directly into the `.p3` output files.
+P3CC is a Windows desktop tool that merges cardholder data from an Excel spreadsheet into `.p3` card-issuance files. It scans `.p3` source files for card-ID markers, looks up the matching Excel row, and injects tagged fields (cardholder name, national ID, mobile number, and other profile-specific data) into the output before the `#END#` marker of each card record.
 
-The program is structured into three main Python files:
-- `main.py`: The entry point of the application, orchestrating the file selection, data processing, and output generation.
-- `utils.py`: Contains pure helper functions for data transformation, file handling, profile detection, and text building. It's designed for reusability and testability.
-- `config.py`: Centralizes all configurable parameters, such as encoding, file extensions, binary markers, profile signatures, and field mappings. This file is designed to be easily modified without touching the core logic.
-- `exceptions.py`: Defines custom exception classes for specific error conditions within the application, allowing for more precise error handling and clearer debugging.
+It ships as a Tkinter GUI packaged into a standalone `P3CC.exe` (via PyInstaller) — end users need **no Python installed** and never touch a terminal.
+
+The program is structured into these Python modules (source/dev mode only — none of this is required to run the packaged `.exe`):
+- `app.py`: the GUI entry point — what PyInstaller packages into `P3CC.exe`.
+- `gui.py`: the whole Tkinter UI — main window, Settings dialog, Manage Fields dialog, progress bar, results panel, error dialogs.
+- `main.py`: orchestrates file discovery, Excel loading, profile detection, and output generation via `run_pipeline()`. Also a minimal console entry point (`python main.py`) for developer debugging.
+- `utils.py`: pure helper functions for data transformation, file handling, profile detection, and text building.
+- `config.py`: developer-only constants — encoding, binary markers, profile signatures, and the built-in seed/reset field mappings.
+- `settings.py` / `field_map_store.py`: load and save the user-editable `settings.json` (remembered folders) and `field_map.json` (Excel-column → `.p3`-tag mappings) next to the running exe.
+- `exceptions.py`: custom exception classes for specific error conditions, for precise error handling and clearer debugging.
 
 ## Features
 
-- **Profile-based Processing**: Automatically detects the Excel file structure (e.g., 'Yalla', 'Zamalek', 'Classic') and applies the correct data mapping.
-- **Efficient Data Lookup**: Uses Pandas DataFrames with indexed lookups for fast retrieval of card data.
-- **Arabic Character Normalization**: Includes robust handling for Arabic characters and numbers.
-- **Configurable Field Mapping**: Easily extendable to support new Excel columns or output tags via `config.py`.
-- **Progress Tracking**: Provides a progress bar for long-running operations.
-- **Logging**: Detailed logging for better traceability and debugging.
+- **Portable, no-install packaging**: runs as `dist/P3CC/P3CC.exe` on any Windows machine, no Python required. Distribute the whole `P3CC` folder as a unit, not just the `.exe`.
+- **Profile-based processing**: automatically detects the Excel file structure (e.g., `yalla`, `zamalek`, `classic`) and applies the correct data mapping.
+- **Efficient data lookup**: uses pandas DataFrames with indexed lookups for fast retrieval of card data.
+- **Arabic character normalization**: normalizes Eastern Arabic-Indic digits and a couple of special codepoints for `cp1256`-safe output.
+- **User-editable field mappings**: the GUI's "Manage Fields" dialog lets you add/edit/delete/reorder Excel-column → `.p3`-tag mappings per profile — no code change needed when a customer adds or drops an Excel column.
+- **Remembered folders**: the Settings dialog remembers your last-used source and Excel folders.
+- **Progress tracking and results panel**: a progress bar during processing, then a summary (files processed, cards read/written/skipped, elapsed time, output path) with an "Open Output Folder" button.
+- **Logging**: detailed logging to `p3cc.log` next to the app for traceability and debugging.
 
-## How to Use
+## How to Use (end users)
 
-1.  **Prerequisites**:
-    *   Ensure you have Python 3.x installed.
-    *   Install the required libraries by running:
-        ```bash
-        pip install -r requirements.txt
-        ```
+1. Get the `P3CC` folder (containing `P3CC.exe` and its supporting files) — copy the whole folder, not just the `.exe`.
+2. Double-click `P3CC.exe`.
+3. **Choose Folder…** — pick the folder containing your `.p3` source files.
+4. **Choose File…** — pick your Excel data file (`.xlsx` or `.xls`).
+5. Click **Run**. A progress bar tracks the batch; when it finishes you'll see a results summary and an **Open Output Folder** button.
+6. The output `.p3` file is written into the same folder as your source files, named after that folder (e.g. a folder named `My P3 Files` produces `My_P3_Files.p3`).
 
-2.  **Prepare Your Files**:
-    *   Place your `.p3` source files in a designated folder.
-    *   Have your Excel spreadsheet (`.xlsx` or `.xls`) ready with the data you want to integrate.
+Use **Settings** to change the default folders the two file pickers open to. Use **Manage Fields** to add, edit, delete, or reorder which Excel column feeds which `.p3` tag for the active profile, without touching any code — see [Field mappings](#field-mappings-manage-fields-dialog) below.
 
-3.  **Launch the Program**:
-    *   Navigate to the project directory in your terminal.
-    *   Run the `run.bat` file:
-        ```bash
-        run.bat
-        ```
-    *   Alternatively, you can run `main.py` directly:
-        ```bash
-        python main.py
-        ```
+## Running from source (developers)
 
-4.  **Follow the Prompts**:
-    *   The program will first ask you to select the folder containing your `.p3` files.
-    *   Next, it will prompt you to select your Excel data file.
-    *   P3CC will then process the files, displaying a progress bar.
-    *   Upon completion, it will generate a new `.p3` output file in the same directory as your source `.p3` files, named after the source folder (e.g., `My P3 Files.p3` becomes `My_P3_Files.p3`).
+```bash
+pip install -r requirements-dev.txt   # runtime deps + pyinstaller
+python app.py                         # run the GUI
+python main.py                        # console entry point for pipeline debugging (still uses Tk file dialogs)
+toolkit.bat                           # menu-driven wrapper: run / test / check / setup / package
+```
 
-## Configuration (`config.py`)
+See `CLAUDE.md` for the full architecture notes, build instructions, and the `.p3` file format details.
 
-The `config.py` file is the central place for all program settings. You can modify it to adapt P3CC to different data structures or output requirements.
+## Field mappings (Manage Fields dialog)
 
-### Key Sections to Modify:
+Day-to-day changes to which Excel column feeds which `.p3` tag are made from the GUI, not by editing code:
+
+1. Open **Manage Fields** from the main window.
+2. Pick the profile to edit from the dropdown.
+3. **Add…** / **Edit…** a field: give it a tag (e.g. `<address>`), a value source (an Excel column, a comma-separated fallback list, the running card counter, or empty), and an optional transform (strip blank/N-A values, normalize Arabic characters, or append `.JPG`).
+4. **Move Up** / **Move Down** to reorder, **Delete** to remove a field.
+5. **Reset Profile to Defaults** restores the built-in mapping for that profile if you want to start over.
+6. **Save & Close** writes the change to `field_map.json` next to the exe — it takes effect on the next Run, no restart needed.
+
+## Configuration for developers (`config.py`)
+
+`config.py` holds the constants that define the output data contract — a wrong edit here can silently corrupt card output, so it's a developer-only change, not something exposed in the GUI.
 
 #### 1. `ENCODING`
-- **Purpose**: Specifies the character encoding for reading and writing `.p3` files.
-- **Example**: `ENCODING = 'cp1256'` (Common for Arabic Windows environments)
+- **Purpose**: character encoding for reading and writing `.p3` files.
+- **Value**: `ENCODING = 'cp1256'` (common for Arabic Windows environments).
 
 #### 2. `CARD_FILE_EXT`
-- **Purpose**: Defines the file extension for the card data files.
-- **Example**: `CARD_FILE_EXT = 'p3'`
+- **Purpose**: file extension for the card data files.
+- **Value**: `CARD_FILE_EXT = 'p3'`.
 
 #### 3. `PROFILE_SIGNATURES`
-- **Purpose**: Maps profile names to a dictionary containing:
-    *   `'signatures'`: A list of column names that *must* exist in the Excel file for that profile to be detected.
-    *   `'lookup_col'`: The column name to use for indexing the Excel DataFrame (e.g., 'Card No').
-- The order of profiles in this dictionary matters; the first matching profile will be selected.
-- **How to Add/Modify**:
-    *   To add a new profile, add a new entry to this dictionary.
-    *   The key is your chosen profile name (e.g., `'my_new_profile'`).
-    *   The value is a dictionary specifying its `signatures` and `lookup_col`.
-- **Example**:
+- **Purpose**: maps a profile name to the Excel columns that must all be present to identify it, and which column is the card-ID lookup key. Dict order matters — the first matching profile wins.
+- **How to add a profile**: add an entry with a `signatures` list and a `lookup_col`, then add a matching entry to `FIELD_MAP` below so there's seed data the first time someone opens Manage Fields for it.
+- **Current profiles**:
 ```python
 PROFILE_SIGNATURES = {
-    'classic': {
-        'signatures': ['Card No'],
+    'yalla': {
+        'signatures': ['Card No', 'Mobile Number'],
         'lookup_col': 'Card No',
     },
-    'yalla': {
-        'signatures': ['Mobile Number'],
+    'classic': {
+        'signatures': ['Card No'],
         'lookup_col': 'Card No',
     },
     'zamalek': {
@@ -95,69 +97,55 @@ PROFILE_SIGNATURES = {
 ```
 
 #### 4. `FIELD_MAP`
-- **Purpose**: Defines how data from your Excel file is mapped to the output `.p3` file for each detected profile. Each entry is a tuple: `(output_tag, col_def, processor_key)`.
-- **How to Add/Modify**:
-    *   **`output_tag` (string)**: The tag that will be written to the `.p3` file (e.g., `'<arabic>'`, `'<MobileNumber>'`).
-    *   **`col_def` (string, list of strings, `None`, or `'__line_count__'`)**:
-        *   **String**: A direct column name from your Excel sheet (e.g., `'CardHolder Name'`).
-        *   **List of Strings**: A list of fallback column names. The program will try each name in order, using the first one it finds (e.g., `['الاسم', 'الإســــــم']`).
-        *   **`None`**: Indicates that no specific column value is used; the tag will be written with an empty value (e.g., for `<address>` if the address is not in Excel).
-        *   **`'__line_count__'`**: A special sentinel that injects the current card counter (line number) into the output. Used for dynamic values not present in Excel.
-    *   **`processor_key` (string or `None`)**:
-        *   A string key that refers to a data processing function defined in `utils.py`'s `_PROCESSOR_REGISTRY`.
-        *   Common keys include:
-            *   `'col_check'`: Applies `col_check` (handles NaN/None values, strips whitespace).
-            *   `'chr_replace'`: Applies `chr_replace` (normalizes Arabic characters).
-            *   `'jpg'`: Appends `.JPG` to the value.
-        *   **`None`**: If `None`, the value is simply converted to a string without any special processing.
-
-- **Example (Adding a new field to an existing profile)**:
-    Let's say you want to add a new field `<Email>` to the `yalla` profile, and its column in Excel is `Email Address`.
+- **Purpose**: the built-in seed data for each profile's field mappings — what a fresh install starts from, and what Manage Fields' "Reset to Defaults" restores. Each entry is a tuple: `(output_tag, col_def, processor_key)`.
+    - **`output_tag`**: the tag written to the `.p3` file (e.g. `'<arabic>'`, `'<MobileNumber>'`).
+    - **`col_def`**: an Excel column name (`str`), a list of fallback column names (first found wins), `None` (tag written empty), or `'__line_count__'` (injects the running card counter).
+    - **`processor_key`**: a key into `utils.py`'s processor registry — `'col_check'` (strips/NaN-guards), `'chr_replace'` (normalizes Arabic characters), `'jpg'` (appends `.JPG`) — or `None` for a plain string conversion.
+- **Example** — the real `yalla` profile:
 ```python
 FIELD_MAP = {
     'yalla': [
-        # ... existing fields ...
-        ('<address>',       'Address',                      None),
-        ('<city>',          'City',                         None),
-        ('<Email>',         'Email Address',                None), # New field
+        ('<arabic>', 'CardHolder Name', None),
+        ('<national>', 'NID', 'col_check'),
+        ('<postoffice>', 'Post Office Name2', 'chr_replace'),
+        ('<region>', 'Post Region', 'col_check'),
+        ('<barcode>', 'Barcode', None),
+        ('<ClientNo>', 'Client No', None),
+        ('<MobileNumber>', 'Mobile Number', None),
+        ('<IssuanceDate>', 'Issue Date', None),
+        ('<address>', 'Address', None),
+        ('<city>', 'City', None),
     ],
-    # ... other profiles ...
-}
-```
-
-- **Example (Adding a new profile)**:
-    If you added `'my_new_profile'` to `PROFILE_SIGNATURES`, you would then define its field map:
-```python
-FIELD_MAP = {
-    # ... existing profiles ...
-    'my_new_profile': [
-        ('<ID>',            'Unique Column A',              None),
-        ('<Name>',          'Customer Name',                'chr_replace'),
-        ('<Status>',        'Account Status',               'col_check'),
-        ('<Counter>',       '__line_count__',               None),
-    ],
+    # 'classic' and 'zamalek' follow the same shape.
 }
 ```
 
 ## Error Handling (`exceptions.py`)
 
-The `exceptions.py` file defines custom exception classes that are used throughout the P3CC application for specific error conditions. This allows for more precise error handling and provides clearer, more descriptive error messages, which aids in debugging and troubleshooting.
+`exceptions.py` defines custom exception classes used throughout P3CC for specific error conditions, allowing precise error handling and clearer, more descriptive messages.
 
--   **`P3CCError`**: The base exception for all custom errors in P3CC. All other custom exceptions inherit from this.
--   **`ProfileDetectionError`**: Raised when the program cannot identify a matching profile for the provided Excel file based on the `PROFILE_SIGNATURES` in `config.py`.
--   **`SourceFilesError`**: Raised when no `.p3` source files are found in the selected directory.
--   **`MissingColumnError`**: Raised when a required column (as defined in `FIELD_MAP` or `PROFILE_SIGNATURES`) is missing from the Excel data.
--   **`InvalidCardError`**: Raised when card data is found to be malformed or does not meet expected criteria during processing.
+- **`P3CCError`**: base exception for all custom errors in P3CC. All other custom exceptions inherit from this.
+- **`ProfileDetectionError`**: raised when no profile signature in `PROFILE_SIGNATURES` matches the provided Excel file.
+- **`SourceFilesError`**: raised when no `.p3` source files are found in the selected directory.
+- **`MissingColumnError`**: raised when a required column (from `FIELD_MAP` or `PROFILE_SIGNATURES`) is missing from the Excel data.
+- **`InvalidCardError`**: raised when card data is found to be malformed or does not meet expected criteria during processing.
 
 ## Project Structure
 
 ```
-P3ccV2/
-├── main.py             # Main application logic and execution flow
-├── utils.py            # Helper functions for data processing, file operations, etc.
-├── config.py           # Centralized configuration for profiles, field mappings, and constants
-├── exceptions.py       # Custom exception definitions for robust error handling
-├── requirements.txt    # List of Python dependencies
-├── run.bat             # Batch file to easily launch the program
-└── README.md           # This documentation
+p3cc/
+├── app.py               # GUI entry point — what PyInstaller packages
+├── gui.py                # Tkinter GUI: main window, Settings, Manage Fields
+├── main.py               # Pipeline orchestration + console dev entry point
+├── utils.py               # Pure helper functions
+├── config.py              # Developer-only constants, profile signatures, seed field map
+├── settings.py            # settings.json load/save
+├── field_map_store.py     # field_map.json load/save
+├── exceptions.py          # Custom exception definitions
+├── P3CC.spec              # PyInstaller build spec (committed — preserves hidden-import fixes)
+├── requirements.txt       # Runtime dependencies
+├── requirements-dev.txt   # Runtime deps + PyInstaller (for building the exe)
+├── run.bat                # Dev-only: activates .venv, runs python main.py
+├── toolkit.bat            # Menu-driven wrapper: run / test / check / setup / package
+└── README.md              # This documentation
 ```

@@ -233,6 +233,12 @@ class FieldMapDialog(tk.Toplevel):
     # ── Helpers ──────────────────────────────────────────────────────────
 
     def _current_fields(self) -> list[dict]:
+        """Query: the active profile's fields, without creating a profile entry."""
+        return self._field_map.get(self._profile_var.get(), [])
+
+    def _current_fields_for_edit(self) -> list[dict]:
+        """Command: the active profile's fields, creating an empty list for it
+        if this is the first field ever added to that profile."""
         return self._field_map.setdefault(self._profile_var.get(), [])
 
     def _refresh_tree(self):
@@ -265,7 +271,7 @@ class FieldMapDialog(tk.Toplevel):
         FieldEditDialog(self, self._excel_columns, None, self._on_field_added)
 
     def _on_field_added(self, field: dict):
-        self._current_fields().append(field)
+        self._current_fields_for_edit().append(field)
         self._refresh_tree()
 
     def _edit_field(self):
@@ -277,7 +283,7 @@ class FieldMapDialog(tk.Toplevel):
                          lambda field: self._on_field_edited(idx, field))
 
     def _on_field_edited(self, idx: int, field: dict):
-        self._current_fields()[idx] = field
+        self._current_fields_for_edit()[idx] = field
         self._refresh_tree()
 
     def _delete_field(self):
@@ -285,14 +291,14 @@ class FieldMapDialog(tk.Toplevel):
         if idx is None:
             messagebox.showerror('Manage Fields', 'Select a field to delete first.')
             return
-        del self._current_fields()[idx]
+        del self._current_fields_for_edit()[idx]
         self._refresh_tree()
 
     def _move_field(self, direction: int):
         idx = self._selected_index()
         if idx is None:
             return
-        fields = self._current_fields()
+        fields = self._current_fields_for_edit()
         new_idx = idx + direction
         if 0 <= new_idx < len(fields):
             fields[idx], fields[new_idx] = fields[new_idx], fields[idx]

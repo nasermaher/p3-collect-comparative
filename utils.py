@@ -26,38 +26,35 @@ log = logging.getLogger(__name__)
 
 # ── Value processors ──────────────────────────────────────────────────────────
 
-def _plain(val) -> str:
-    """Default processor — stringify without modification. Empty for NaN/None."""
-    if pd.isna(val):
-        return ''
-    return str(val)
+def _nan_safe(transform: Callable[[object], str]) -> Callable[[object], str]:
+    """
+    Wrap a processor's real transform so a blank Excel cell (NaN/None) becomes
+    an empty tag value, instead of the literal string 'nan' or (for _replaced)
+    a crash from iterating a float as a string.
+    """
+    def processor(val):
+        if pd.isna(val):
+            return ''
+        return transform(val)
+    return processor
 
 
-def _checked(val: str) -> str:
-    """Return empty string for NaN/None/NaT; otherwise stringify and strip."""
-    if pd.isna(val):
-        return ''
-    return str(val).strip()
+_plain = _nan_safe(str)                                   # default processor — stringify as-is
+_checked = _nan_safe(lambda val: str(val).strip())         # stringify and strip whitespace
+_jpg = _nan_safe(lambda val: str(val) + '.JPG')            # append .JPG extension
 
 
-def _replaced(string: str) -> str:
+def _replace_arabic_chars(string: str) -> str:
     """
     Normalize Arabic characters in a string:
       1. Replace any char with codepoint > 65381 with '_' (pre-pass, list comp).
       2. Apply NORMALIZATION_TABLE via str.translate() (C-speed, single pass).
-    Empty for NaN/None.
     """
-    if pd.isna(string):
-        return ''
     pre_cleaned = ['_' if ord(c) > 65381 else c for c in string]
     return ''.join(pre_cleaned).translate(NORMALIZATION_TABLE)
 
 
-def _jpg(val) -> str:
-    """Processor: append .JPG extension. Empty for NaN/None."""
-    if pd.isna(val):
-        return ''
-    return str(val) + '.JPG'
+_replaced = _nan_safe(_replace_arabic_chars)
 
 # ── Processor registry ────────────────────────────────────────────────────────
 # Maps the string name stored in config.FIELD_MAP to the actual callable.

@@ -11,15 +11,17 @@ It ships as a Tkinter GUI (`app.py`/`gui.py`), packaged with PyInstaller into a 
 ## Commands
 
 ```bash
-pip install -r requirements-dev.txt         # runtime deps + pyinstaller
+pip install -r requirements-dev.txt         # runtime deps + pyinstaller + pytest
 python app.py                               # run the GUI (source/dev mode)
-python main.py                              # minimal console entry point, for debugging the pipeline without Tkinter
+python main.py                              # minimal console entry point, for debugging the pipeline without the full gui.py window (still uses Tk's native file-picker dialogs)
+pytest                                       # run the unit test suite (tests/)
 pyinstaller P3CC.spec                       # rebuild dist/P3CC/P3CC.exe from the committed spec (preferred — preserves hidden-import fixes)
 pyinstaller --windowed --name P3CC app.py   # regenerates P3CC.spec from scratch; only do this deliberately, then re-commit the spec
 run.bat                                     # dev-only: activates .venv then runs python main.py
+toolkit.bat                                 # menu-driven wrapper: run/test/check/setup/package (see toolkit.bat itself)
 ```
 
-There is no test suite, linter, or CI config in this repo — `test.py` is a Python-Arabic-codepoint scratch file, not a real test. When making changes, verify manually by running `python app.py` (or `run_pipeline()` directly) against sample data (see `p3_PILOT HOME DELIVERY 20-05-2026/` for example input files).
+There is no linter or CI config in this repo. Unit tests live in `tests/` (pytest, covering `utils.py`'s pure functions, `settings.py`, and `field_map_store.py`) — run with `pytest` after `pip install -r requirements-dev.txt`. `test.py` at the repo root is unrelated: a Python-Arabic-codepoint scratch file, not a real test. Neither the tests nor `python app.py` exercise the actual `.p3`/Excel I/O end-to-end — verify that manually against sample data (see `p3_PILOT HOME DELIVERY 20-05-2026/` for example input files) before shipping a change to `main.py`'s pipeline loop.
 
 ## Architecture
 

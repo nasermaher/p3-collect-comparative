@@ -13,9 +13,7 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from exceptions import (
-    P3CCError, ProfileDetectionError, MissingColumnError,
-)
+from exceptions import P3CCError
 from config import ENCODING, CARD_FILE_EXT, CARD_ID_START, CARD_ID_END, CARD_MARKER, END_MARKER
 from utils  import (
     select_file,
@@ -129,7 +127,6 @@ def run_pipeline(
                     # ── Append card data after END marker ─────────────────
                     if is_end:
                         try:
-                            # Locate the matching row
                             excel_row = excel.loc[card_id]
 
                             # Resolve to Series if duplicate card IDs exist in Excel
