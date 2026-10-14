@@ -21,6 +21,7 @@ import copy
 import json
 import logging
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -47,13 +48,32 @@ def default_profiles() -> list[dict]:
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
+# One or more <tag>s with no spaces or stray brackets, e.g. <IssuanceDate> or
+# <paymentDate><paymentNo>. The card machines match tags character-for-character.
+_TAG_RE = re.compile(r'(<[^<>\s]+>)+')
+_RESERVED_TAGS = ('<cpf>', '<EOR>')      # appended automatically after every card
+
+
+def tag_problem(tag) -> str | None:
+    """Return why a field tag is invalid, or None if it's fine."""
+    if not isinstance(tag, str) or not tag.strip():
+        return 'must be non-empty text'
+    if not _TAG_RE.fullmatch(tag):
+        return (f'"{tag}" is not a valid tag — write it exactly as configured on the card machine, '
+                'inside < >, with no spaces (e.g. <IssuanceDate>)')
+    reserved = [r for r in _RESERVED_TAGS if r.lower() in tag.lower()]
+    if reserved:
+        return f'"{tag}" must not include {", ".join(reserved)} — P3CC adds <cpf>1<EOR> after every card itself'
+    return None
+
+
 def _field_problems(where: str, field) -> list[str]:
     if not isinstance(field, dict):
         return [f'{where}: must be an object with "tag", "column" and "processor".']
     problems = []
-    tag = field.get('tag')
-    if not isinstance(tag, str) or not tag.strip():
-        problems.append(f'{where}: "tag" must be non-empty text.')
+    tag_issue = tag_problem(field.get('tag'))
+    if tag_issue:
+        problems.append(f'{where}: tag {tag_issue}.')
     col = field.get('column')
     valid_col = (
         col is None

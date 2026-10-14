@@ -109,7 +109,7 @@ def test_load_rejects_non_utf8_file_with_clear_message(app_dir):
     ([profile(lookup_col='')], 'card-ID column'),
     ([profile(), profile('b')], 'same identifying columns'),
     ([profile(signatures=[])], 'No profile has identifying columns'),
-    ([profile(fields=[{'tag': '', 'column': 'X', 'processor': None}])], '"tag" must be non-empty'),
+    ([profile(fields=[{'tag': '', 'column': 'X', 'processor': None}])], 'tag must be non-empty'),
     ([profile(fields=[{'tag': '<x>', 'column': '', 'processor': None}])], '"column" must be'),
     ([profile(fields=[{'tag': '<x>', 'column': 'X', 'processor': 'nope'}])], 'unknown processor'),
 ])
@@ -117,6 +117,31 @@ def test_validate_profiles_reports_problem(profiles, expected):
     problems = field_map_store.validate_profiles(profiles)
 
     assert any(expected in p for p in problems), problems
+
+
+@pytest.mark.parametrize('tag', ['<IssuanceDate>', '<paymentDate><paymentNo>', '<VisaCardNo>', '<الاسم>'])
+def test_tag_problem_accepts_well_formed_tags(tag):
+    assert field_map_store.tag_problem(tag) is None
+
+
+@pytest.mark.parametrize(('tag', 'expected'), [
+    ('IssuanceDate', 'not a valid tag'),          # no brackets
+    ('<Issuance Date>', 'not a valid tag'),       # space inside
+    ('<IssuanceDate', 'not a valid tag'),         # unclosed
+    ('<a><b', 'not a valid tag'),
+    ('<>', 'not a valid tag'),
+    (' <x> ', 'not a valid tag'),                 # surrounding spaces would reach the output
+    ('<cpf>', 'must not include <cpf>'),
+    ('<x><EOR>', 'must not include <EOR>'),
+    ('   ', 'must be non-empty'),
+])
+def test_tag_problem_rejects_malformed_or_reserved_tags(tag, expected):
+    assert expected in field_map_store.tag_problem(tag)
+
+
+def test_save_rejects_malformed_tag(app_dir):
+    with pytest.raises(FieldMapError, match='not a valid tag'):
+        field_map_store.save_profiles([profile(fields=[{'tag': 'Barcode', 'column': 'X', 'processor': None}])])
 
 
 def test_validate_allows_profile_without_signatures_alongside_detectable_one():

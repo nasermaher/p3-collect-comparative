@@ -112,6 +112,7 @@ Each card record in the output looks like this, all on one line:
 #### Tags
 - Copy each tag **exactly** as it is configured on the machine, including the angle brackets: `<IssuanceDate>`. Tags are case-sensitive: `<IssuanceDate>`, `<issuancedate>` and `<Issuance Date>` are three different tags to the machine.
 - Don't put spaces inside a tag.
+- **Save & Close** and the field editor refuse a malformed tag (missing `< >`, a space inside, or `<cpf>`/`<EOR>`) and say why. They can't know the machine's exact tag names, though, so checking those is still up to you.
 - Don't add `<cpf>1<EOR>`. P3CC adds it automatically at the end of every card.
 - The **order** of the fields in Manage Profiles is the order written to the output. Use **Move Up** / **Move Down** to match the order the machine expects.
 - A tag the machine needs but that has no Excel data still has to be listed. Use the value source **Empty (no value)**.

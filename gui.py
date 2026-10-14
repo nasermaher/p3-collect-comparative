@@ -157,8 +157,9 @@ class FieldEditDialog(tk.Toplevel):
 
     def _save(self):
         tag = self._tag_var.get().strip()
-        if not tag:
-            messagebox.showerror('Field', 'Tag cannot be empty.')
+        tag_issue = field_map_store.tag_problem(tag)
+        if tag_issue:
+            messagebox.showerror('Field', f'The tag {tag_issue}.', parent=self)
             return
 
         mode = self._source_mode.get()
