@@ -224,5 +224,11 @@ p3cc/
 ├── requirements-dev.txt   # تبعيات التشغيل + PyInstaller (لبناء المِلَفّ التنفيذي)
 ├── run.bat                # خاص بالمطورين فقط: يُفعِّل .venv ثم يشغل python app.py مباشرة
 ├── toolkit.bat            # غلاف بقائمة تفاعلية: run / test / check / setup / package
-└── README.md              # هذه الوثائق
+├── tests/                 # اختبارات pytest (ببيانات وهمية فقط)
+├── conftest.py            # تجهيزات pytest المشتركة (مجلد تطبيق معزول)
+├── pytest.ini             # إعدادات pytest
+├── .github/workflows/     # GitHub Actions: فحص الكود والاختبارات مع كل رفع إلى main
+├── README.md / README-ar.md  # هذه الوثائق (إنجليزي / عربي)، وتظهر أيضًا في شاشة المساعدة
+├── CLAUDE.md              # ملاحظات المعمارية للمطورين ولـ Claude Code
+└── PROJECT_HISTORY.md     # القرارات، وسجل الإصدارات، والأفكار المستقبلية
 ```

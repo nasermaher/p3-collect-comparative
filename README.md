@@ -224,5 +224,11 @@ p3cc/
 ├── requirements-dev.txt   # Runtime deps + PyInstaller (for building the exe)
 ├── run.bat                # Dev-only: activates .venv, quick-launches python app.py
 ├── toolkit.bat            # Menu-driven wrapper: run / test / check / setup / package
-└── README.md              # This documentation
+├── tests/                 # pytest suite (synthetic data only)
+├── conftest.py            # Shared pytest fixtures (isolated app dir)
+├── pytest.ini             # pytest settings
+├── .github/workflows/     # GitHub Actions CI: lint + tests on every push to main
+├── README.md / README-ar.md  # This documentation (English / Arabic), also shown in the app's Help
+├── CLAUDE.md              # Architecture notes for developers and Claude Code
+└── PROJECT_HISTORY.md     # Decisions, release history and open ideas
 ```

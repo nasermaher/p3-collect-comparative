@@ -18,6 +18,7 @@ This is the record of what was built, why, and the constraints behind it, so a f
 - **GitHub:** https://github.com/nasermaher/p3-collect-comparative. The repo is **public**, so nothing confidential may ever be committed. The branch is `main`, and local `main` tracks `origin/main`, so a plain `git push` works.
 - **CI:** GitHub Actions `.github/workflows/python-app.yml`, added by the owner from the GitHub website. It runs on push/PR to `main` with Python 3.10: flake8 syntax/undefined-name check, then `pytest`. The owner may add commits on GitHub directly, so **fetch before pushing**.
 - **`_archive/`** is the owner's private folder (old zips, chat logs). It's gitignored, and it was purged from history with a rewrite and force-push (2026-10-14). Never commit or package it.
+- **Repo contents are project files only.** On 2026-10-14 the scratch and working files `test.py`, `handoff.txt` (an old session handoff), `gemini-audit.md` (an external audit transcript) and `P3cc_prd.md` (the original GUI/portability plan, now implemented) were moved out of the repo into `_archive/`. Keep notes, transcripts and experiments there, not in the repo.
 - **Gitignored runtime files:** `settings.json`, `field_map.json`, `field_map.*.json` (backups), `field_map.tmp`, `p3cc.log`, `P3CC-v*-portable.zip`, `build/`, `dist/`.
 
 ## Release history
@@ -61,6 +62,8 @@ GUI app (Tkinter) packaged with PyInstaller. Profiles were `yalla` / `classic` /
 - Patching files from Git Bash heredocs on this machine has mangled `\r\n` and `\\s` escapes. Prefer writing helper scripts with the Write tool, and check for stray CR bytes after edits.
 
 ## Ideas not yet done (candidates for future work)
+
+- **32-bit Windows build (open question).** The packaged exe is 64-bit only. The owner was checking with the client whether any target machine is 32-bit. If one is, it needs a separate 32-bit Python/venv toolchain, and probably pinned pandas/numpy versions, since recent releases are dropping win32 wheels.
 
 - Per-file output (one `_processed.p3` per source file) instead of one merged file. This was considered when output naming was changed, and the owner chose the merged file.
 - Showing per-record warnings in the GUI (currently only counts, with details in `p3cc.log`).
