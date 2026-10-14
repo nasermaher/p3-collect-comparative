@@ -21,37 +21,47 @@ run.bat                                     # dev-only: activates .venv then run
 toolkit.bat                                 # menu-driven wrapper: run/test/check/setup/package (see toolkit.bat itself)
 ```
 
-There is no linter or CI config in this repo. Unit tests live in `tests/` (pytest, covering `utils.py`'s pure functions, `settings.py`, and `field_map_store.py`) — run with `pytest` after `pip install -r requirements-dev.txt`. `test.py` at the repo root is unrelated: a Python-Arabic-codepoint scratch file, not a real test. Neither the tests nor `python app.py` exercise the actual `.p3`/Excel I/O end-to-end — verify that manually against sample data (see `p3_PILOT HOME DELIVERY 20-05-2026/` for example input files) before shipping a change to `main.py`'s pipeline loop.
+There is no linter or CI config in this repo. Unit tests live in `tests/` (pytest, covering `utils.py`'s pure functions, `settings.py`, `field_map_store.py` (validation, migration, error handling), and the record pipeline) — run with `pytest` after `pip install -r requirements-dev.txt`. `test.py` at the repo root is unrelated: a Python-Arabic-codepoint scratch file, not a real test. Neither the tests nor `python app.py` exercise the actual `.p3`/Excel I/O end-to-end — verify that manually against sample data (see `p3_PILOT HOME DELIVERY 20-05-2026/` for example input files) before shipping a change to `main.py`'s pipeline loop.
 
 ## Architecture
 
 Strict separation of concerns — **logic and data are never mixed**:
 
-- **`config.py`** — pure data, no logic, developer-only (never edited by the GUI). `ENCODING` (`cp1256`), binary markers (`CARD_MARKER = b'"%B'`, `END_MARKER = b'#END#'`), card-ID byte offsets, `PROFILE_SIGNATURES`, `NORMALIZATION_TABLE`, and `FIELD_MAP` (now just the built-in seed/reset data — see below).
+- **`config.py`** — pure data, no logic, developer-only (never edited by the GUI). `ENCODING` (`cp1256`), binary markers (`CARD_MARKER = b'"%B'`, `END_MARKER = b'#END#'`), record layout/card-ID byte offsets, `OUTPUT_SUFFIX`, `LINE_COUNT_SENTINEL`, `DEFAULT_PROFILES` (built-in seed/reset profile — see below), the pre-3.2 migration rules (`LEGACY_PROFILE_RENAMES`, `RETIRED_PROFILES`), and `NORMALIZATION_TABLE`.
 - **`utils.py`** — pure, side-effect-free helper functions (data transforms, profile detection, text building) plus the one necessary UI call (`select_file`, Tkinter file dialog). Every function is independently testable in isolation from `main.py`'s I/O loop.
-- **`main.py`** — orchestration only. `run_pipeline(p3_root, excel_path, progress_callback=None)` is the reusable core: discovers source files (skipping any `*_processed.p3` from a previous run) → names the output after the first source file + `_processed` → loads Excel → detects profile → streams each `.p3` file byte-by-byte, rewriting it with injected fields → returns a summary dict. `main()` is a thin console wrapper around it for dev debugging. Contains no business logic itself.
-- **`exceptions.py`** — `P3CCError` base class with `ProfileDetectionError`, `SourceFilesError`, `MissingColumnError`, `InvalidCardError` subclasses for precise error handling.
+- **`main.py`** — orchestration only. `run_pipeline(p3_root, excel_path, progress_callback=None)` is the reusable core: discovers source files (skipping any `*_processed.p3` from a previous run) → names the output after the first source file + `_processed` → loads profiles from `field_map.json` → loads Excel → detects profile (logs any field whose Excel column is missing) → streams each `.p3` file byte-by-byte, rewriting it with injected fields → returns a summary dict. `main()` is a thin console wrapper around it for dev debugging. Contains no business logic itself.
+- **`exceptions.py`** — `P3CCError` base class with `ProfileDetectionError`, `SourceFilesError`, `MissingColumnError`, `FieldMapError`, `InvalidCardError` subclasses for precise error handling.
 - **`settings.py`** — loads/saves `settings.json` (remembered folders) next to the running exe (`get_app_dir()`, frozen-aware). Falls back to defaults on any missing/corrupt file, never raises.
-- **`field_map_store.py`** — loads/saves `field_map.json` (the user-editable field mappings — see below) next to the exe, seeded from `config.FIELD_MAP` on first run.
-- **`gui.py`** — all Tkinter UI: main window, Settings dialog, Manage Fields dialog (`FieldMapDialog`/`FieldEditDialog`), progress bar, results panel, error dialogs. Runs `run_pipeline()` on a background thread.
+- **`field_map_store.py`** — loads, validates, migrates, imports, resets and saves `field_map.json` (the user-editable profiles — see below) next to the exe, seeded from `config.DEFAULT_PROFILES` on first run.
+- **`gui.py`** — all Tkinter UI: main window, Settings dialog, Manage Profiles dialog (`ProfileManagerDialog` / `ProfileEditDialog` / `FieldEditDialog`), progress bar, results panel, error dialogs. Runs `run_pipeline()` on a background thread. Checks `field_map.json` at startup so a broken or just-migrated file is reported immediately.
 - **`app.py`** — the GUI entry point; what PyInstaller packages.
 
 ### The profile system (the extension point)
 
-Different customers' Excel exports have different columns. A "profile" (`yalla`, `classic`, `zamalek`) is auto-detected from which columns are present, then drives how fields are mapped into the `.p3` output.
+A "profile" is a card type (default: `debit-cards`). It is auto-detected from the Excel sheet's columns and then drives which fields are injected into the `.p3` output. **Profiles are entirely user data**: nothing about them is hardcoded. They live in `field_map.json` next to the exe and are managed from the GUI's Manage Profiles dialog. Adding, renaming or retiring a card type is not a code change.
 
-**Which columns exist and which profile they belong to (`PROFILE_SIGNATURES`) is a developer-only change in `config.py`** — a wrong signature breaks auto-detection for every user of that profile:
+`field_map.json` format (version 2):
 
-1. Add an entry to `PROFILE_SIGNATURES`: the list of column names that must all be present to identify this profile, and which column is the `lookup_col` (card-ID key used to index the DataFrame). Dict order matters — first matching profile wins (`detect_profile` in `utils.py`).
-2. Add a matching entry to `config.FIELD_MAP` so there's seed data for the new profile the first time a user opens Manage Fields for it.
+```json
+{"version": 2, "profiles": [
+  {"name": "debit-cards", "signatures": ["Card No"], "lookup_col": "Card No",
+   "fields": [{"tag": "<arabic>", "column": "CardHolder Name", "processor": null}]}
+]}
+```
 
-**Which Excel column feeds which `.p3` tag, for an *existing* profile, is user-editable** — from the GUI's Manage Fields dialog (`gui.FieldMapDialog`), not a code change. This exists because that mapping changes often in practice (a customer adds/drops an Excel column and the corresponding output tag needs to follow). It's stored in `field_map.json` next to the exe:
+- `signatures`: identifying Excel columns. ALL must be present for the profile to match. An empty list means the profile is never auto-detected.
+- `lookup_col`: the card-ID column; the DataFrame is indexed on it for O(1) lookup.
+- Each field's `column`: an Excel column name, a list of fallback names (first found wins), `null` (tag written empty), or `config.LINE_COUNT_SENTINEL` (`"__line_count__"`, the running card counter). `processor`: a key into `utils._PROCESSOR_REGISTRY` (`'col_check'` strips/NaN-guards, `'chr_replace'` normalizes Arabic characters, `'jpg'` appends `.JPG`), or `null` for plain `str()`.
 
-- Each field is `{"tag": "<output_tag>", "column": col_def, "processor": processor_key}`.
-- `col_def`: an Excel column name (str), a list of fallback column names (first found wins), `null` (tag written empty), or the sentinel `"__line_count__"` (injects the running card counter).
-- `processor_key`: a string key into `utils.py`'s `_PROCESSOR_REGISTRY` (`'col_check'` strips/NaN-guards, `'chr_replace'` normalizes Arabic characters, `'jpg'` appends `.JPG`), or `null` for plain `str()` conversion.
-- `field_map_store.load_field_map()` seeds `field_map.json` from `config.FIELD_MAP` on first run, and falls back to those same built-in defaults if the file goes missing or corrupt. The Manage Fields dialog also has a per-profile "Reset to Defaults" button that does the same.
-- `utils.get_resolved_field_map()` loads the current `field_map.json` and resolves processor keys to callables; `main.run_pipeline()` calls it once per batch (not once per card) and passes the result into `utils.build_text()`, so edits made in the GUI take effect on the next Run with no restart needed.
+Detection (`utils.detect_profile(columns, profiles)`): among profiles whose signatures are all present, **the most specific wins** (most signature columns), so list order never matters. An equally specific tie raises `ProfileDetectionError` rather than guessing. A missing `lookup_col` raises `MissingColumnError`.
+
+Loading and safety (`field_map_store`):
+- `load_profiles_report()` seeds the file from `config.DEFAULT_PROFILES` if it's missing. If it's unreadable or invalid, it raises `FieldMapError` (with the JSON line/column, if relevant) and **never silently replaces the file**. Before 3.2 the fallback was silent, which made hand-edits look ignored. A UTF-8 BOM is accepted.
+- `validate_profiles()` enforces: at least one profile; unique names (case-insensitive); no two profiles with identical signature sets; `lookup_col` set whenever signatures are; well-formed fields with known processors; at least one detectable profile. `save_profiles()` validates first and writes via a temp file plus `os.replace`.
+- Pre-3.2 files (`{profile_name: [fields]}`) are migrated on load. The original is backed up as `field_map.pre-3.2-backup-<ts>.json`. `classic` becomes `debit-cards` (fields kept, signatures taken from the default of that name), `yalla`/`zamalek` are dropped, and unknown names are kept with no signatures. These rules live in `config.LEGACY_PROFILE_RENAMES` / `RETIRED_PROFILES`. The migration summary is returned as a notice, which the GUI shows.
+- `read_field_map_file()` (used by the dialog's Import…) parses and migrates any file without saving it. `reset_to_defaults()` backs up the current file, even an unreadable one, before rewriting.
+
+`main.run_pipeline()` loads profiles once per batch, so GUI edits apply on the next Run with no restart. It returns the profile name and any migration notice in its summary dict. `utils.resolve_fields(profile)` turns processor keys into callables once per batch for `utils.build_text(fields, row, line_count)`.
 
 ### The `.p3` file processing loop (`main.py`)
 
@@ -74,5 +84,5 @@ A card record is one *logical* line: `<8-digit serial>"%B<16-digit card ID><encr
 
 - Packaged via PyInstaller (`--windowed`, one-folder) so end users run `dist/P3CC/P3CC.exe` with no Python installed. Distribute the whole `dist/P3CC/` folder as a unit, not just the `.exe`.
 - `settings.py` and `field_map_store.py` both resolve their JSON files next to the running exe via `settings.get_app_dir()` (frozen-aware: `sys.executable`'s folder when packaged, this script's folder in source mode) — never `%APPDATA%`, so the whole app folder stays portable across machines/drives.
-- `settings.json` and `field_map.json` (along with `p3cc.log`) are runtime-generated and gitignored — don't hand-edit or commit them. If missing or corrupt, they're silently reseeded from `settings.DEFAULT_SETTINGS` / `config.FIELD_MAP`.
+- `settings.json` and `field_map.json` (along with `p3cc.log`) are runtime-generated and gitignored — don't hand-edit or commit them. A missing file is reseeded from `settings.DEFAULT_SETTINGS` / `config.DEFAULT_PROFILES`. A corrupt `settings.json` silently falls back to defaults, but a corrupt `field_map.json` raises `FieldMapError` and is shown to the user, never overwritten.
 - `main.py`'s logging setup only adds a console `StreamHandler` if `sys.stderr is not None` — a `--windowed` build has no console, and `sys.stderr` is `None` there, so adding one unconditionally would crash on the first log call.

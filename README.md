@@ -11,12 +11,22 @@ It ships as a Tkinter GUI packaged into a standalone `P3CC.exe` (via PyInstaller
 
 The program is structured into these Python modules (source/dev mode only — none of this is required to run the packaged `.exe`):
 - `app.py`: the GUI entry point — what PyInstaller packages into `P3CC.exe`.
-- `gui.py`: the whole Tkinter UI — main window, Settings dialog, Manage Fields dialog, progress bar, results panel, error dialogs.
+- `gui.py`: the whole Tkinter UI — main window, Settings dialog, Manage Profiles dialog, progress bar, results panel, error dialogs.
 - `main.py`: orchestrates file discovery, Excel loading, profile detection, and output generation via `run_pipeline()`. Also a minimal console entry point (`python main.py`) for developer debugging.
 - `utils.py`: pure helper functions for data transformation, file handling, profile detection, and text building.
-- `config.py`: developer-only constants — encoding, binary markers, profile signatures, and the built-in seed/reset field mappings.
-- `settings.py` / `field_map_store.py`: load and save the user-editable `settings.json` (remembered folders) and `field_map.json` (Excel-column → `.p3`-tag mappings) next to the running exe.
+- `config.py`: developer-only constants — encoding, binary markers, the built-in default profile, and the pre-3.2 migration rules.
+- `settings.py` / `field_map_store.py`: load and save the user-editable `settings.json` (remembered folders) and `field_map.json` (card profiles: identifying columns, card-ID column and Excel-column → `.p3`-tag fields) next to the running exe. `field_map_store.py` also validates, migrates, imports and resets profiles.
 - `exceptions.py`: custom exception classes for specific error conditions, for precise error handling and clearer debugging.
+
+## What's new in 3.2
+
+- **Card profiles are now fully managed from the app.** A profile is a card type, for example `debit-cards`. Each one has a name, the Excel columns that identify it, the card-ID column, and its fields. All of this is stored in `field_map.json` and edited in the new **Manage Profiles** window (it replaces Manage Fields). You can add, rename or delete card types without a new program version.
+- **Default profile is now `debit-cards`.** It replaces `classic` and covers all debit cards. It is identified by the `Card No` column. The `yalla` and `zamalek` profiles are retired.
+- **Most specific profile wins.** When an Excel sheet matches more than one profile, the profile with the most identifying columns is chosen, whatever its position in the list. If two profiles match equally, the run stops with a clear message instead of guessing.
+- **Test with Excel File.** In Manage Profiles, pick an Excel file to see which profile it selects and which field columns are missing, before running a batch.
+- **Old `field_map.json` files are upgraded automatically.** Copy a `field_map.json` from an earlier version next to `P3CC.exe`, or use **Import…** in Manage Profiles. The upgrade keeps your field edits, renames `classic` to `debit-cards`, removes `yalla`/`zamalek`, and keeps the original as a `field_map.pre-3.2-backup-<date>.json` copy.
+- **`field_map.json` problems are shown, never hidden.** Before 3.2, an unreadable file was silently replaced by the built-in defaults, so hand-edits seemed to be ignored. Now the app shows the error, including the line number for JSON syntax errors. It never overwrites the file on its own. Files saved by Notepad as "UTF-8 with BOM" are accepted. The app checks the file at startup, so a problem shows up right away.
+- **Results panel shows the profile used** for each run.
 
 ## What's new in 3.1
 
@@ -29,14 +39,14 @@ The program is structured into these Python modules (source/dev mode only — no
 ## Features
 
 - **Portable, no-install packaging**: runs as `dist/P3CC/P3CC.exe` on any Windows machine, no Python required. Distribute the whole `P3CC` folder as a unit, not just the `.exe`.
-- **Profile-based processing**: automatically detects the Excel file structure (e.g., `yalla`, `zamalek`, `classic`) and applies the correct data mapping.
+- **Profile-based processing**: automatically detects the card type (profile, e.g. `debit-cards`) from the Excel sheet's columns, the most specific match winning, and applies that profile's field mapping.
 - **Efficient data lookup**: uses pandas DataFrames with indexed lookups for fast retrieval of card data.
 - **Arabic character normalization**: normalizes Eastern Arabic-Indic digits and a couple of special codepoints for `cp1256`-safe output.
-- **User-editable field mappings**: the GUI's "Manage Fields" dialog lets you add/edit/delete/reorder Excel-column → `.p3`-tag mappings per profile — no code change needed when a customer adds or drops an Excel column.
+- **User-managed profiles and fields**: the GUI's "Manage Profiles" dialog lets you add, rename and delete card types, set the columns that identify them, test an Excel file against them, and add/edit/delete/reorder each profile's Excel-column → `.p3`-tag fields. No code change is needed when card types or Excel columns change.
 - **Remembered folders**: the Settings dialog remembers your last-used source and Excel folders.
 - **Card data integrity**: each card record is copied byte-for-byte as one block, including any line breaks inside its encrypted data. The Excel data is appended right after `#END#`.
 - **Record layout checks**: malformed headers, serial-number gaps, missing `#END#` and merged records are reported in `p3cc.log`.
-- **Progress tracking and results panel**: a progress bar during processing, then a summary (files processed, cards read/written/skipped, layout warnings, lines discarded, elapsed time, output path) with an "Open Output Folder" button.
+- **Progress tracking and results panel**: a progress bar during processing, then a summary (profile used, files processed, cards read/written/skipped, layout warnings, lines discarded, elapsed time, output path) with an "Open Output Folder" button.
 - **Logging**: detailed logging to `p3cc.log` next to the app for traceability and debugging.
 
 ## How to Use (end users)
@@ -48,7 +58,7 @@ The program is structured into these Python modules (source/dev mode only — no
 5. Click **Run**. A progress bar tracks the batch; when it finishes you'll see a results summary and an **Open Output Folder** button.
 6. The output `.p3` file is written into the same folder as your source files, named after the first source file with `_processed` added (e.g. `cards_01.p3` produces `cards_01_processed.p3`). All source files in the folder are still merged into this one output file.
 
-Use **Settings** to change the default folders the two file pickers open to. Use **Manage Fields** to add, edit, delete, or reorder which Excel column feeds which `.p3` tag for the active profile, without touching any code — see [Field mappings](#field-mappings-manage-fields-dialog) below.
+Use **Settings** to change the default folders the two file pickers open to. Use **Manage Profiles** to manage card types and which Excel column feeds which `.p3` tag, without touching any code — see [Profiles & field mappings](#profiles--field-mappings-manage-profiles-dialog) below.
 
 ## Running from source (developers)
 
@@ -61,16 +71,26 @@ toolkit.bat                           # menu-driven wrapper: run / test / check 
 
 See `CLAUDE.md` for the full architecture notes, build instructions, and the `.p3` file format details.
 
-## Field mappings (Manage Fields dialog)
+## Profiles & field mappings (Manage Profiles dialog)
 
-Day-to-day changes to which Excel column feeds which `.p3` tag are made from the GUI, not by editing code:
+A **profile** is a card type. Each profile has:
+- a **name** (e.g. `debit-cards`);
+- **identifying columns**: Excel columns that must ALL be present for this profile to be selected (e.g. `Card No`). To tell a new card type apart, give it a column only that type's Excel sheet has;
+- a **card-ID column**: the Excel column holding the card number, matched against the card ID in the `.p3` records;
+- its **fields**: which Excel column feeds which `.p3` tag, in output order.
 
-1. Open **Manage Fields** from the main window.
-2. Pick the profile to edit from the dropdown.
-3. **Add…** / **Edit…** a field: give it a tag (e.g. `<address>`), a value source (an Excel column, a comma-separated fallback list, the running card counter, or empty), and an optional transform (strip blank/N-A values, normalize Arabic characters, or append `.JPG`).
-4. **Move Up** / **Move Down** to reorder, **Delete** to remove a field.
-5. **Reset Profile to Defaults** restores the built-in mapping for that profile if you want to start over.
-6. **Save & Close** writes the change to `field_map.json` next to the exe — it takes effect on the next Run, no restart needed.
+When an Excel sheet matches several profiles, the one with the most identifying columns wins. If two match equally, the run stops and asks you to make them distinguishable.
+
+Everything is edited from the GUI, not in code:
+
+1. Open **Manage Profiles** from the main window.
+2. **Test with Excel File…** (recommended first): shows which profile a sheet selects, warns about field columns the sheet doesn't have, and loads the sheet's column names into the dropdowns.
+3. Pick a profile from the dropdown, or create one with **New…**. Use **Edit…** to rename it or change its identifying columns and card-ID column. Use **Delete** to remove it (at least one profile must remain).
+4. **Add Field…** / **Edit Field…**: give the field a tag (e.g. `<address>`), a value source (an Excel column, a comma-separated fallback list, the running card counter, or empty), and an optional transform (strip blank/N-A values, normalize Arabic characters, or append `.JPG`). **Move Up** / **Move Down** reorder fields and **Delete Field** removes one.
+5. **Import…** loads profiles from another `field_map.json`, including one from an older version, which is upgraded on the way in. **Reset All to Defaults** restores the built-in `debit-cards` profile. Both apply only when you save.
+6. **Save & Close** checks everything first: no duplicate names, no two profiles with the same identifying columns, a card-ID column wherever identifying columns are set. Only then does it write `field_map.json` next to the exe. Changes take effect on the next Run, with no restart needed.
+
+`field_map.json` can also be edited by hand (save it as UTF-8). If it can't be read, the app tells you why and leaves the file as it is. Manage Profiles then offers to reset it, keeping a backup copy.
 
 ## Configuration for developers (`config.py`)
 
@@ -84,52 +104,42 @@ Day-to-day changes to which Excel column feeds which `.p3` tag are made from the
 - **Purpose**: file extension for the card data files.
 - **Value**: `CARD_FILE_EXT = 'p3'`.
 
-#### 3. `PROFILE_SIGNATURES`
-- **Purpose**: maps a profile name to the Excel columns that must all be present to identify it, and which column is the card-ID lookup key. Dict order matters — the first matching profile wins.
-- **How to add a profile**: add an entry with a `signatures` list and a `lookup_col`, then add a matching entry to `FIELD_MAP` below so there's seed data the first time someone opens Manage Fields for it.
-- **Current profiles**:
+#### 3. `DEFAULT_PROFILES`
+- **Purpose**: the built-in seed data: what a fresh install's `field_map.json` starts from, and what **Reset All to Defaults** restores. Day-to-day profile changes are made in the GUI and stored in `field_map.json`, not here.
+- **Shape**: each profile is `{'name', 'signatures', 'lookup_col', 'fields'}`. Each field is `{'tag', 'column', 'processor'}`:
+    - **`tag`**: the tag written to the `.p3` file (e.g. `'<arabic>'`).
+    - **`column`**: an Excel column name, a list of fallback column names (first found wins), `None` (tag written empty), or `LINE_COUNT_SENTINEL` (`'__line_count__'`, injects the running card counter).
+    - **`processor`**: `'col_check'` (strips/NaN-guards), `'chr_replace'` (normalizes Arabic characters), `'jpg'` (appends `.JPG`), or `None` for a plain string conversion.
+- **Current default**:
 ```python
-PROFILE_SIGNATURES = {
-    'yalla': {
-        'signatures': ['Card No', 'Mobile Number'],
-        'lookup_col': 'Card No',
-    },
-    'classic': {
+DEFAULT_PROFILES = [
+    {
+        'name': 'debit-cards',
         'signatures': ['Card No'],
         'lookup_col': 'Card No',
+        'fields': [
+            {'tag': '<arabic>',       'column': 'CardHolder Name',   'processor': None},
+            {'tag': '<national>',     'column': 'NID',               'processor': 'col_check'},
+            {'tag': '<postoffice>',   'column': 'Post Office Name2', 'processor': None},
+            {'tag': '<region>',       'column': 'Post Region',       'processor': 'col_check'},
+            {'tag': '<barcode>',      'column': 'Barcode',           'processor': None},
+            {'tag': '<IssuanceDate>', 'column': 'Issue Date',        'processor': None},
+        ],
     },
-    'zamalek': {
-        'signatures': ['رقم بطاقة الصراف الالى'],
-        'lookup_col': 'رقم بطاقة الصراف الالى',
-    },
-    'my_new_profile': {
-        'signatures': ['Unique Column A', 'Unique Column B'],
-        'lookup_col': 'Unique Column A',
-    },
-}
+]
 ```
 
-#### 4. `FIELD_MAP`
-- **Purpose**: the built-in seed data for each profile's field mappings — what a fresh install starts from, and what Manage Fields' "Reset to Defaults" restores. Each entry is a tuple: `(output_tag, col_def, processor_key)`.
-    - **`output_tag`**: the tag written to the `.p3` file (e.g. `'<arabic>'`, `'<MobileNumber>'`).
-    - **`col_def`**: an Excel column name (`str`), a list of fallback column names (first found wins), `None` (tag written empty), or `'__line_count__'` (injects the running card counter).
-    - **`processor_key`**: a key into `utils.py`'s processor registry — `'col_check'` (strips/NaN-guards), `'chr_replace'` (normalizes Arabic characters), `'jpg'` (appends `.JPG`) — or `None` for a plain string conversion.
-- **Example** — the real `yalla` profile:
-```python
-FIELD_MAP = {
-    'yalla': [
-        ('<arabic>', 'CardHolder Name', None),
-        ('<national>', 'NID', 'col_check'),
-        ('<postoffice>', 'Post Office Name2', 'chr_replace'),
-        ('<region>', 'Post Region', 'col_check'),
-        ('<barcode>', 'Barcode', None),
-        ('<ClientNo>', 'Client No', None),
-        ('<MobileNumber>', 'Mobile Number', None),
-        ('<IssuanceDate>', 'Issue Date', None),
-        ('<address>', 'Address', None),
-        ('<city>', 'City', None),
-    ],
-    # 'classic' and 'zamalek' follow the same shape.
+#### 4. `LEGACY_PROFILE_RENAMES` / `RETIRED_PROFILES`
+- **Purpose**: how a pre-3.2 `field_map.json` is upgraded. `LEGACY_PROFILE_RENAMES = {'classic': 'debit-cards'}` renames a profile, keeping its fields and taking its identifying columns from the default of the new name. `RETIRED_PROFILES = ('yalla', 'zamalek')` are dropped (they remain in the backup copy). Any other old profile is kept with no identifying columns until the user sets them.
+
+The resulting `field_map.json` format:
+```json
+{
+  "version": 2,
+  "profiles": [
+    {"name": "debit-cards", "signatures": ["Card No"], "lookup_col": "Card No",
+     "fields": [{"tag": "<arabic>", "column": "CardHolder Name", "processor": null}]}
+  ]
 }
 ```
 
@@ -138,9 +148,10 @@ FIELD_MAP = {
 `exceptions.py` defines custom exception classes used throughout P3CC for specific error conditions, allowing precise error handling and clearer, more descriptive messages.
 
 - **`P3CCError`**: base exception for all custom errors in P3CC. All other custom exceptions inherit from this.
-- **`ProfileDetectionError`**: raised when no profile signature in `PROFILE_SIGNATURES` matches the provided Excel file.
+- **`ProfileDetectionError`**: raised when no profile's identifying columns are all present in the Excel file, or when several profiles match it equally.
 - **`SourceFilesError`**: raised when no `.p3` source files are found in the selected directory.
-- **`MissingColumnError`**: raised when a required column (from `FIELD_MAP` or `PROFILE_SIGNATURES`) is missing from the Excel data.
+- **`MissingColumnError`**: raised when the detected profile's card-ID column is missing from the Excel data.
+- **`FieldMapError`**: raised when `field_map.json` can't be read (bad JSON, wrong encoding) or fails validation. The message names the problem; the file is never silently replaced.
 - **`InvalidCardError`**: raised when card data is found to be malformed or does not meet expected criteria during processing.
 
 ## Project Structure
@@ -148,12 +159,12 @@ FIELD_MAP = {
 ```
 p3cc/
 ├── app.py               # GUI entry point — what PyInstaller packages
-├── gui.py                # Tkinter GUI: main window, Settings, Manage Fields
+├── gui.py                # Tkinter GUI: main window, Settings, Manage Profiles
 ├── main.py               # Pipeline orchestration + console dev entry point
 ├── utils.py               # Pure helper functions
-├── config.py              # Developer-only constants, profile signatures, seed field map
+├── config.py              # Developer-only constants, default profile, migration rules
 ├── settings.py            # settings.json load/save
-├── field_map_store.py     # field_map.json load/save
+├── field_map_store.py     # field_map.json profiles: load/validate/migrate/save
 ├── exceptions.py          # Custom exception definitions
 ├── P3CC.spec              # PyInstaller build spec (committed — preserves hidden-import fixes)
 ├── requirements.txt       # Runtime dependencies

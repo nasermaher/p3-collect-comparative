@@ -1,5 +1,5 @@
 # ── main.py ───────────────────────────────────────────────────────────────────
-# P3CC — Card Data Collect-Comparative Tool - Version 3.1
+# P3CC — Card Data Collect-Comparative Tool - Version 3.2
 # Processing pipeline + a minimal console entry point for developer debugging.
 # Contains no business logic — all logic lives in utils.py and config.py.
 # The GUI entry point (app.py / gui.py) imports run_pipeline() directly.
@@ -22,12 +22,14 @@ from utils  import (
     load_excel,
     detect_profile,
     build_text,
-    get_resolved_field_map,
+    resolve_fields,
+    missing_field_columns,
     iter_records,
     check_record,
     record_serial,
 )
 from settings import get_app_dir
+from field_map_store import load_profiles_report
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 # Configured here so it's active for the entire process including utils imports.
@@ -69,11 +71,13 @@ def run_pipeline(
 
     Returns:
         dict with keys: file_count, total_card_count, skip_count,
-        elapsed, output_path.
+        warning_count, discard_count, elapsed, output_path, profile,
+        field_map_notice (migration summary, or None).
 
     Raises:
-        SourceFilesError, ProfileDetectionError, MissingColumnError,
-        P3CCError — callers should catch these and present a clean message.
+        SourceFilesError, FieldMapError, ProfileDetectionError,
+        MissingColumnError, P3CCError — callers should catch these and
+        present a clean message.
     """
     p3_root = Path(p3_root)
 
@@ -85,17 +89,25 @@ def run_pipeline(
 
     start_time = time.time()
 
+    # Loaded once per batch (not per card) — reflects any edits made in the
+    # GUI's Manage Profiles dialog since the last run, without needing a restart.
+    profiles, field_map_notice = load_profiles_report()
+
     excel = load_excel(excel_path)
 
-    profile, lookup_col = detect_profile(excel.columns)
-    log.info('Profile active: [%s]  |  Index key: [%s]', profile, lookup_col)
+    profile = detect_profile(excel.columns, profiles)
+    lookup_col = profile['lookup_col']
+    log.info('Profile active: [%s]  |  Index key: [%s]', profile['name'], lookup_col)
+
+    missing = missing_field_columns(profile, excel.columns)
+    if missing:
+        log.warning('Excel sheet has no column for tag(s) %s — every card will be skipped '
+                    'until the profile or the sheet is fixed.', ', '.join(missing))
 
     # O(1) card lookups — index set once here, used inside the loop
     excel.set_index(lookup_col, inplace=True, drop=False)
 
-    # Loaded once per batch (not per card) — reflects any edits made in the
-    # GUI's Manage Fields dialog since the last run, without needing a restart.
-    resolved_field_map = get_resolved_field_map()
+    fields = resolve_fields(profile)
 
     file_count       = 0
     total_card_count = 0
@@ -149,7 +161,7 @@ def run_pipeline(
                             excel_row = excel_row.iloc[0]
 
                         # Build & write
-                        text = build_text(profile, excel_row, line_count, resolved_field_map)
+                        text = build_text(fields, excel_row, line_count)
 
                         # ── Write the record untouched, then the tags right after #END# ──
                         file_out.write(record)
@@ -186,6 +198,8 @@ def run_pipeline(
         'discard_count': discard_count,
         'elapsed': elapsed,
         'output_path': p3_fileout,
+        'profile': profile['name'],
+        'field_map_notice': field_map_notice,
     }
 
 

@@ -68,67 +68,96 @@ def test_resolve_col_raises_keyerror_when_no_fallback_column_found():
 
 
 def test_build_text_injects_line_count_for_counter_sentinel():
-    field_map = {'zamalek': [('<cardNo>', '__line_count__', utils._plain)]}
+    fields = [('<cardNo>', config.LINE_COUNT_SENTINEL, utils._plain)]
     row = pd.Series({}, dtype=object)
 
-    text = utils.build_text('zamalek', row, 42, field_map)
+    text = utils.build_text(fields, row, 42)
 
     assert text == '<cardNo>42<cpf>1<EOR>\r\n'
 
 
 def test_build_text_applies_processor_and_concatenates_tags():
-    field_map = {
-        'classic': [
-            ('<arabic>', 'Name', utils._plain),
-            ('<national>', 'NID', utils._checked),
-        ]
-    }
+    fields = [
+        ('<arabic>', 'Name', utils._plain),
+        ('<national>', 'NID', utils._checked),
+    ]
     row = pd.Series({'Name': 'Sara', 'NID': '  9001  '})
 
-    text = utils.build_text('classic', row, 1, field_map)
+    text = utils.build_text(fields, row, 1)
 
     assert text == '<arabic>Sara<national>9001<cpf>1<EOR>\r\n'
+
+
+# ── resolve_fields / missing_field_columns ───────────────────────────────────
+
+
+def test_resolve_fields_maps_processor_keys_to_callables():
+    prof = {'fields': [
+        {'tag': '<a>', 'column': 'A', 'processor': 'col_check'},
+        {'tag': '<b>', 'column': 'B', 'processor': None},
+    ]}
+
+    assert utils.resolve_fields(prof) == [('<a>', 'A', utils._checked), ('<b>', 'B', utils._plain)]
+
+
+def test_missing_field_columns_lists_tags_without_any_matching_column():
+    prof = {'fields': [
+        {'tag': '<ok>', 'column': 'A', 'processor': None},
+        {'tag': '<fallback-ok>', 'column': ['Missing', 'B'], 'processor': None},
+        {'tag': '<gone>', 'column': 'Missing', 'processor': None},
+        {'tag': '<all-gone>', 'column': ['X', 'Y'], 'processor': None},
+        {'tag': '<counter>', 'column': config.LINE_COUNT_SENTINEL, 'processor': None},
+        {'tag': '<empty>', 'column': None, 'processor': None},
+    ]}
+
+    assert utils.missing_field_columns(prof, ['A', 'B']) == ['<gone>', '<all-gone>']
 
 
 # ── detect_profile ─────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    ('columns', 'expected_profile'),
-    [
-        (['Card No', 'Mobile Number'], 'yalla'),
-        (['Card No', 'Other Column'], 'classic'),
-        (['رقم بطاقة الصراف الالى'], 'zamalek'),
-    ],
-)
-def test_detect_profile_matches_real_signatures(columns, expected_profile):
-    profile, lookup_col = utils.detect_profile(columns)
-
-    assert profile == expected_profile
-    assert lookup_col == config.PROFILE_SIGNATURES[expected_profile]['lookup_col']
+def prof(name, signatures, lookup_col='Card No'):
+    return {'name': name, 'signatures': signatures, 'lookup_col': lookup_col, 'fields': []}
 
 
-def test_detect_profile_first_match_wins_when_multiple_signatures_satisfied():
-    # yalla is declared before classic in PROFILE_SIGNATURES, and columns containing both
-    # 'Card No' and 'Mobile Number' satisfy both signatures — yalla must win, not classic.
-    profile, _ = utils.detect_profile(['Card No', 'Mobile Number'])
-    assert profile == 'yalla'
+def test_detect_profile_matches_default_debit_cards_profile():
+    profile = utils.detect_profile(['Card No', 'Other Column'], config.DEFAULT_PROFILES)
+
+    assert profile['name'] == 'debit-cards'
+    assert profile['lookup_col'] == 'Card No'
+
+
+@pytest.mark.parametrize('order', [1, -1])
+def test_detect_profile_most_specific_match_wins_regardless_of_order(order):
+    # Columns satisfy both profiles; the one with more identifying columns
+    # must win whichever comes first in the list.
+    profiles = [prof('debit-cards', ['Card No']), prof('prepaid', ['Card No', 'Wallet ID'])][::order]
+
+    assert utils.detect_profile(['Card No', 'Wallet ID'], profiles)['name'] == 'prepaid'
+    assert utils.detect_profile(['Card No'], profiles)['name'] == 'debit-cards'
+
+
+def test_detect_profile_raises_on_equally_specific_matches():
+    profiles = [prof('a', ['Card No', 'X']), prof('b', ['Card No', 'Y'])]
+
+    with pytest.raises(ProfileDetectionError, match='a, b'):
+        utils.detect_profile(['Card No', 'X', 'Y'], profiles)
+
+
+def test_detect_profile_ignores_profiles_without_signatures():
+    profiles = [prof('draft', []), prof('debit-cards', ['Card No'])]
+
+    assert utils.detect_profile(['Card No'], profiles)['name'] == 'debit-cards'
 
 
 def test_detect_profile_raises_when_no_signature_matches():
-    with pytest.raises(ProfileDetectionError):
-        utils.detect_profile(['Unrelated Column'])
+    with pytest.raises(ProfileDetectionError, match='debit-cards'):
+        utils.detect_profile(['Unrelated Column'], config.DEFAULT_PROFILES)
 
 
-def test_detect_profile_raises_missing_column_when_lookup_col_absent(monkeypatch):
-    monkeypatch.setitem(
-        utils.PROFILE_SIGNATURES,
-        'broken',
-        {'signatures': ['Trigger'], 'lookup_col': 'Not Present'},
-    )
-
+def test_detect_profile_raises_missing_column_when_lookup_col_absent():
     with pytest.raises(MissingColumnError):
-        utils.detect_profile(['Trigger'])
+        utils.detect_profile(['Trigger'], [prof('broken', ['Trigger'], lookup_col='Not Present')])
 
 
 # ── get_source_files ───────────────────────────────────────────────────────

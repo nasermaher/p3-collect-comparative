@@ -20,6 +20,11 @@ class MissingColumnError(P3CCError):
     pass
 
 
+class FieldMapError(P3CCError):
+    """Raised when field_map.json can't be read or fails validation."""
+    pass
+
+
 class InvalidCardError(P3CCError):
     """Raised when card data is malformed."""
     pass

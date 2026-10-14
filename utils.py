@@ -1,5 +1,5 @@
 # ── utils.py ──────────────────────────────────────────────────────────────────
-# Pure helper functions for P3CC.  - Version 3.1
+# Pure helper functions for P3CC.  - Version 3.2
 # No I/O, no sys.exit(), no file paths — only data transformations.
 # Every function here is independently testable.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -15,7 +15,6 @@ import xlrd  # noqa: F401 — pandas.read_excel() only imports this lazily for .
 from pathlib import Path
 from tkinter import filedialog
 
-import field_map_store
 from exceptions import ProfileDetectionError, SourceFilesError, MissingColumnError
 from config import (
     CARD_FILE_EXT,
@@ -25,7 +24,7 @@ from config import (
     SERIAL_LEN,
     CARD_ID_START,
     CARD_ID_END,
-    PROFILE_SIGNATURES,
+    LINE_COUNT_SENTINEL,
     NORMALIZATION_TABLE,
 )
 
@@ -64,9 +63,9 @@ def _replace_arabic_chars(string: str) -> str:
 _replaced = _nan_safe(_replace_arabic_chars)
 
 # ── Processor registry ────────────────────────────────────────────────────────
-# Maps the string name stored in config.FIELD_MAP to the actual callable.
-# config.py stores None for most fields; special fields store a string key.
-# _normalize_field_map() resolves both at startup.
+# Maps the processor key stored on a field (in field_map.json) to the actual
+# callable. A field's processor is None for most fields (plain str()).
+# resolve_fields() resolves both once per run.
 
 _PROCESSOR_REGISTRY: dict[str, Callable] = {
     'col_check':   _checked,
@@ -75,23 +74,42 @@ _PROCESSOR_REGISTRY: dict[str, Callable] = {
 }
 
 
-# ── FIELD_MAP normalization ───────────────────────────────────────────────────
 
-def get_resolved_field_map() -> dict:
+
+def processor_keys() -> list[str]:
+    """Valid processor keys a field may use (besides None)."""
+    return list(_PROCESSOR_REGISTRY)
+
+
+# ── Profile fields ────────────────────────────────────────────────────────────
+
+def resolve_fields(profile: dict) -> list[tuple]:
     """
-    Load the current (possibly user-edited via the GUI's Manage Fields dialog)
-    field map from field_map_store and resolve processor keys to callables, so
-    build_text() never branches on strings. Called once per pipeline run —
-    not cached — so edits made between runs take effect without a restart.
+    Resolve a profile's fields into (tag, column, processor_callable) tuples,
+    so build_text() never branches on processor strings. Called once per run.
     """
-    raw = field_map_store.load_field_map()
-    resolved = {}
-    for profile, fields in raw.items():
-        resolved[profile] = [
-            (f['tag'], f.get('column'), _PROCESSOR_REGISTRY.get(f.get('processor'), _plain))
-            for f in fields
-        ]
-    return resolved
+    return [
+        (f['tag'], f.get('column'), _PROCESSOR_REGISTRY.get(f.get('processor'), _plain))
+        for f in profile['fields']
+    ]
+
+
+def missing_field_columns(profile: dict, columns) -> list[str]:
+    """
+    Return the tags of a profile's fields whose Excel column (or every
+    fallback column) is absent from `columns`. Every card would be skipped
+    for such a field, so this is checked once up front.
+    """
+    present = set(columns)
+    missing = []
+    for f in profile['fields']:
+        col = f.get('column')
+        if col is None or col == LINE_COUNT_SENTINEL:
+            continue
+        names = col if isinstance(col, list) else [col]
+        if not any(name in present for name in names):
+            missing.append(f['tag'])
+    return missing
 
 
 # ── Card record assembly & validation ─────────────────────────────────────────
@@ -212,23 +230,23 @@ def resolve_col(row: pd.Series, col_def: str | list[str] | None) -> str:
 
 # ── Text builder ──────────────────────────────────────────────────────────────
 
-def build_text(profile: str, row: pd.Series, line_count: int, resolved_field_map: dict) -> str:
+def build_text(fields: list[tuple], row: pd.Series, line_count: int) -> str:
     """
     Build the full tagged output string for one card row.
 
     Args:
-        profile:            Active profile name ('yalla', 'zamalek', 'classic').
-        row:                A pandas Series representing one Excel row.
-        line_count:         Card counter — injected for fields marked '__line_count__'.
-        resolved_field_map: Result of get_resolved_field_map(), passed in so it's
-                             loaded once per batch rather than once per card.
+        fields:      The active profile's fields, from resolve_fields() — resolved
+                     once per batch rather than once per card.
+        row:         A pandas Series representing one Excel row.
+        line_count:  Card counter — injected for fields whose column is
+                     LINE_COUNT_SENTINEL.
 
     Returns:
         Encoded tag string ending with <cpf>1<EOR>\\r\\n
     """
     parts = []
-    for tag, col_def, processor in resolved_field_map[profile]:
-        value = line_count if col_def == '__line_count__' else resolve_col(row, col_def)
+    for tag, col_def, processor in fields:
+        value = line_count if col_def == LINE_COUNT_SENTINEL else resolve_col(row, col_def)
         parts.append(tag + processor(value))
     parts.append('<cpf>1<EOR>\r\n')
     return ''.join(parts)
@@ -236,41 +254,58 @@ def build_text(profile: str, row: pd.Series, line_count: int, resolved_field_map
 
 # ── Profile detection ─────────────────────────────────────────────────────────
 
-def detect_profile(columns) -> tuple[str, str]:
+def detect_profile(columns, profiles: list[dict]) -> dict:
     """
-    Identify the active profile from Excel column names.
+    Identify the active profile from the Excel column names.
+
+    A profile matches when ALL its identifying columns ('signatures') are
+    present. Profiles with no identifying columns are never auto-detected.
+    When several profiles match, the most specific one — the one with the
+    most identifying columns — wins, so list order never matters. A tie
+    between equally specific matches is ambiguous and raises, rather than
+    silently picking one.
 
     Args:
-        columns: pandas Index or list of column names.
+        columns:   pandas Index or list of Excel column names.
+        profiles:  The profiles from field_map_store.load_profiles().
 
     Returns:
-        (profile_name, lookup_col) — the profile key and the card ID column.
+        The matching profile dict.
 
     Raises:
-        ProfileDetectionError: if no profile signature matches.
+        ProfileDetectionError: if no profile matches, or several match equally.
         MissingColumnError: if the matched profile's lookup_col is absent.
     """
-    profile = None
-    lookup_col = None
+    present = set(columns)
+    matches = [
+        p for p in profiles
+        if p['signatures'] and all(sig in present for sig in p['signatures'])
+    ]
 
-    # 1. Dynamically match the profile signature
-    for prof_name, prof_def in PROFILE_SIGNATURES.items():
-        # Checks if all required signature columns exist in the input columns
-        if all(sig in columns for sig in prof_def['signatures']):
-            profile = prof_name
-            lookup_col = prof_def['lookup_col']
-            break   # Exit loop once the first match is found
-    # 2. No signature matched at all
-    if profile is None:
-        raise ProfileDetectionError('Unrecognized Excel structure — no matching profile found.')
-
-    # 3. Matched profile, but its lookup column is missing from the sheet
-    if lookup_col not in columns:
-        raise MissingColumnError(
-            f'Profile "{profile}" requires lookup column "{lookup_col}" — not found.'
+    if not matches:
+        known = '; '.join(
+            f"{p['name']} ({', '.join(p['signatures'])})" for p in profiles if p['signatures']
+        )
+        raise ProfileDetectionError(
+            'Unrecognized Excel structure — no profile has all its identifying columns '
+            f'in this sheet. Profiles: {known or "none defined"}.'
         )
 
-    return profile, lookup_col
+    best = max(len(p['signatures']) for p in matches)
+    top = [p for p in matches if len(p['signatures']) == best]
+    if len(top) > 1:
+        raise ProfileDetectionError(
+            'This Excel sheet matches several profiles equally: '
+            f"{', '.join(p['name'] for p in top)}. Add an identifying column to one of them "
+            'in Manage Profiles so they can be told apart.'
+        )
+
+    profile = top[0]
+    if profile['lookup_col'] not in present:
+        raise MissingColumnError(
+            f'Profile "{profile["name"]}" requires card-ID column "{profile["lookup_col"]}" — not found.'
+        )
+    return profile
 
 
 # ── File selection dialog ─────────────────────────────────────────────────────

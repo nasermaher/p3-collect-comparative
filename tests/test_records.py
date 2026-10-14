@@ -1,5 +1,6 @@
 import pandas as pd
 
+import field_map_store
 import main
 import utils
 
@@ -87,20 +88,23 @@ def test_check_record_flags_merged_records():
 # ── run_pipeline end-to-end (synthetic data) ─────────────────────────────────
 
 
-def test_run_pipeline_writes_records_untouched_with_tags_after_end(tmp_path, monkeypatch):
+def test_run_pipeline_writes_records_untouched_with_tags_after_end(tmp_path, app_dir, monkeypatch):
     src = tmp_path / 'batch'
     src.mkdir()
     (src / 'cards.p3').write_bytes(REC_1 + b'\r\n' + REC_2 + b'\r\n')
 
-    col = 'رقم بطاقة الصراف الالى'   # zamalek profile signature
-    excel = pd.DataFrame({col: ['1111222233334444', '5555666677778888'], 'Name': ['A', 'B']})
+    field_map_store.save_profiles([{
+        'name': 'debit-cards', 'signatures': ['Card No'], 'lookup_col': 'Card No',
+        'fields': [{'tag': '<name>', 'column': 'Name', 'processor': None}],
+    }])
+    excel = pd.DataFrame({'Card No': ['1111222233334444', '5555666677778888'], 'Name': ['A', 'B']})
     monkeypatch.setattr(main, 'load_excel', lambda path: excel)
-    monkeypatch.setattr(main, 'get_resolved_field_map',
-                        lambda: {'zamalek': [('<name>', 'Name', utils._plain)]})
 
     result = main.run_pipeline(src, 'unused.xlsx')
 
     out = result['output_path'].read_bytes()
     assert out == REC_1 + b'<name>A<cpf>1<EOR>\r\n' + REC_2 + b'<name>B<cpf>1<EOR>\r\n'
+    assert result['profile'] == 'debit-cards'
+    assert result['field_map_notice'] is None
     assert result['skip_count'] == 0
     assert result['warning_count'] == 0

@@ -1,10 +1,10 @@
 # ── config.py ─────────────────────────────────────────────────────────────────
-# All constants and field definitions for P3CC.  - Version 3.1
-# Edit this file to: change encoding, add profiles, or modify field mappings.
+# All constants and field definitions for P3CC.  - Version 3.2
+# Edit this file to: change encoding, markers, or the built-in default profiles.
 # No logic lives here — only data.
 # ──────────────────────────────────────────────────────────────────────────────
 
-VERSION = "3.1"
+VERSION = "3.2"
 # ── File & encoding constants ─────────────────────────────────────────────────
 
 ENCODING      = 'cp1256'
@@ -28,78 +28,59 @@ SERIAL_LEN    = 8
 CARD_ID_START = 11   # SERIAL_LEN + len(CARD_MARKER)
 CARD_ID_END   = 27   # 16-digit card ID
 
-# ── Profile signatures ────────────────────────────────────────────────────────
-# Maps profile name → dictionary containing:
-#   'signatures': list of column names that MUST exist in the Excel file
-#                 for that profile to be selected.
-#   'lookup_col': the column name to use for indexing the Excel DataFrame.
-# Order matters: first match wins in detect_profile().
+# ── Card-counter sentinel ─────────────────────────────────────────────────────
+# A field whose column is this sentinel gets the running card counter, not an
+# Excel value.
 
-PROFILE_SIGNATURES = {
-    'yalla': {
-        'signatures': ['Card No', 'Mobile Number'],
-        'lookup_col': 'Card No',  # Assuming 'Card No' is the lookup for yalla profile
-    },
-    'classic': {
+LINE_COUNT_SENTINEL = '__line_count__'
+
+# ── Default profiles (seed / reset data) ──────────────────────────────────────
+# Profiles themselves are user-editable: they live in field_map.json next to
+# the exe and are managed from the GUI's "Manage Profiles" dialog. This list
+# is only what a fresh install starts from and what "Reset All to Defaults"
+# restores. Each profile is:
+#
+#   name        → str        : unique profile name, e.g. 'debit-cards'
+#   signatures  → list[str]  : identifying Excel columns — ALL must be present
+#                              for the profile to be detected. When several
+#                              profiles match, the one with the most matching
+#                              identifying columns wins (see detect_profile()).
+#   lookup_col  → str        : the card-ID column the Excel sheet is indexed on
+#   fields      → list[dict] : {'tag', 'column', 'processor'} — the tags injected
+#                              after #END#, in order:
+#       column    → str            : Excel column name
+#                   list[str]      : fallback list — first found column is used
+#                   None           : tag written with an empty value
+#                   LINE_COUNT_SENTINEL : injects the running card counter
+#       processor → str | None     : key into utils._PROCESSOR_REGISTRY
+#                                    ('col_check', 'chr_replace', 'jpg'),
+#                                    None = plain str()
+
+DEFAULT_PROFILES = [
+    {
+        'name': 'debit-cards',
         'signatures': ['Card No'],
         'lookup_col': 'Card No',
+        'fields': [
+            {'tag': '<arabic>',       'column': 'CardHolder Name',   'processor': None},
+            {'tag': '<national>',     'column': 'NID',               'processor': 'col_check'},
+            {'tag': '<postoffice>',   'column': 'Post Office Name2', 'processor': None},
+            {'tag': '<region>',       'column': 'Post Region',       'processor': 'col_check'},
+            {'tag': '<barcode>',      'column': 'Barcode',           'processor': None},
+            {'tag': '<IssuanceDate>', 'column': 'Issue Date',        'processor': None},
+        ],
     },
-    'zamalek': {
-        'signatures': ['رقم بطاقة الصراف الالى'],
-        'lookup_col': 'رقم بطاقة الصراف الالى',
-    },
-}
+]
 
-# ── Field map ─────────────────────────────────────────────────────────────────
-# Each entry is a tuple: (output_tag, col_def, processor_key)
-#
-#   output_tag    → str            : the tag written to the output file
-#   col_def       → str            : fixed Excel column name
-#                   list[str]      : fallback list — first found column is used
-#                   None           : no column value; tag written with empty value
-#                   "__line_count__": special sentinel — injects the card counter
-#   processor_key → str | None     : key for _PROCESSOR_REGISTRY in utils.py
-#                                    None is replaced with _plain at startup
-#                                    by _normalize_field_map() in utils.py
-#
-# To add a new profile: add its signature to PROFILE_SIGNATURES above,
-# then add its field list here. No other file needs to change.
-# ──────────────────────────────────────────────────────────────────────────────
+# ── Migration of field_map.json files from versions before 3.2 ────────────────
+# Old files only held {profile_name: [fields]}; profile detection was hardcoded.
+# On migration, a renamed profile keeps its fields and takes its identifying
+# columns from the DEFAULT_PROFILES entry of its new name. Retired profiles are
+# dropped (still kept in the backup copy). Any other profile name is kept with
+# no identifying columns, so it's never auto-detected until the user sets them.
 
-FIELD_MAP = {
-    'yalla': [
-        ('<arabic>', 'CardHolder Name', None),
-        ('<national>', 'NID', 'col_check'),
-        ('<postoffice>', 'Post Office Name2', 'chr_replace'),
-        ('<region>', 'Post Region', 'col_check'),
-        ('<barcode>', 'Barcode', None),
-        ('<ClientNo>', 'Client No', None),
-        ('<MobileNumber>', 'Mobile Number', None),
-        ('<IssuanceDate>', 'Issue Date', None),
-        ('<address>', 'Address', None),
-        ('<city>', 'City', None),
-    ],
-    'classic': [
-        ('<arabic>',        'CardHolder Name',      None),
-        ('<national>',      'NID',                  'col_check'),
-        ('<postoffice>',    'Post Office Name2',    None),
-        ('<region>',        'Post Region',          'col_check'),
-        ('<barcode>',       'Barcode',              None),
-        ('<IssuanceDate>',  'Issue Date',           None),
-    ],
-    'zamalek': [
-        ('<cardNo>',                  '__line_count__',             None),  # injected counter
-        ('<fullname>',                ['الاسم', 'الإســــــم'],       None),
-        ('<title>',                   ['اللقب', 'اللـقـــب'],       'col_check'),
-        ('<desc>',                    'الصفة',                      'col_check'),
-        ('<membershipNo>',            'رقم العضوية',                None),
-        ('<paymentDate><paymentNo>',  None,                         None),  # hardcoded empty tag pair
-        ('<Image>',                   'الصورة',                     'jpg'),
-        ('<VisaCardNo>',              'رقم بطاقة الصراف الالى',      None),
-        ('<IssuanceDate>',            'تاريخ الاصدار',               None),
-        ('<address>',                 None,                         None),  # empty tag
-    ],
-}
+LEGACY_PROFILE_RENAMES = {'classic': 'debit-cards'}
+RETIRED_PROFILES       = ('yalla', 'zamalek')
 
 
 # ── Arabic character normalization ────────────────────────────────────────────
