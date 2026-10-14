@@ -11,6 +11,8 @@ P3CC-v*-portable.zip
 # Runtime-generated, per-machine
 settings.json
 field_map.json
+field_map.*.json
+field_map.tmp
 p3cc.log
 
 # Claude Code skill hosting — dev tooling, not project files
