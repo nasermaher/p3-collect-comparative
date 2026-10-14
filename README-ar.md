@@ -1,4 +1,6 @@
 # P3CC (P3 Collect-Comparative)
+[English](README.md) | **العربية**
+
 قام بتطويره المهندس محمود الأنصاري
 "ddph.it@egyptpost.org"
 
@@ -63,6 +65,8 @@ P3CC هو تطبيق سطح مكتب على ويندوز يقوم بدمج بي�
 ## التشغيل من المصدر (للمطورين)
 
 ```bash
+git clone https://github.com/nasermaher/p3-collect-comparative.git   # تنزيل الكود المصدري
+cd p3-collect-comparative
 pip install -r requirements-dev.txt   # تبعيات التشغيل + pyinstaller
 python app.py                         # تشغيل الواجهة الرسومية
 python main.py                        # نقطة دخول طرفية لتصحيح أخطاء خط المعالجة (لا تزال تستخدم نوافذ Tk لاختيار المِلَفّات)

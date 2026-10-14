@@ -1,4 +1,6 @@
 # P3CC (P3 Collect-Comparative)
+**English** | [العربية](README-ar.md)
+
 Developed by Eng. Mahmoud Al-Ansary
 "ddph.it@egyptpost.org"
 
@@ -63,6 +65,8 @@ Use **Settings** to change the default folders the two file pickers open to. Use
 ## Running from source (developers)
 
 ```bash
+git clone https://github.com/nasermaher/p3-collect-comparative.git   # get the source
+cd p3-collect-comparative
 pip install -r requirements-dev.txt   # runtime deps + pyinstaller
 python app.py                         # run the GUI
 python main.py                        # console entry point for pipeline debugging (still uses Tk file dialogs)
