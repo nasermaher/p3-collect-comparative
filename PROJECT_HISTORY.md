@@ -11,15 +11,27 @@ This is the record of what was built, why, and the constraints behind it, so a f
 - **Test before commit.** Implement, run `pytest`, rebuild the package, then wait for the owner to test on real files (and sometimes the client too) before committing. Commit when the owner confirms.
 - **Every release:** bump `config.VERSION`, add a "What's new in X.Y" section to both READMEs, then run `toolkit.bat package`. That runs the tests, builds the exe and creates `P3CC-vX.Y-portable.zip`. The READMEs are bundled into the exe (in-app Help), so rebuild after any README change.
 - The packaged zip goes to the client: the whole `dist/P3CC` folder, never the `.exe` alone.
-- **GitHub Release per version:** after the owner confirms and the commits are pushed, rebuild the zip from that exact HEAD. Then create release `vX.Y` on that commit with the zip attached and bilingual notes (English plus an Arabic summary, including upgrade steps). `gh` isn't installed, so this goes through the GitHub REST API using the token from `git credential fill`, which is piped in and never printed. Afterwards, check that the downloaded asset's SHA-256 matches the local zip. Released so far: **v3.2** (2026-10-14).
+- **GitHub Release per version:** after the owner confirms and the commits are pushed, rebuild the zip from that exact HEAD. Then create release `vX.Y` on that commit with the zip attached and bilingual notes (English plus an Arabic summary, including upgrade steps). `gh` isn't installed, so this goes through the GitHub REST API using the token from `git credential fill`, which is piped in and never printed. Afterwards, check that the downloaded asset's SHA-256 matches the local zip. If a tag is later moved to a newer commit, re-point the release (`target_commitish`) and replace the asset with a zip rebuilt from that commit, because the bundled READMEs may differ. Released so far: **v3.2** (2026-10-14, tag on `89675da`, asset SHA-256 `41521573…`).
+- **After packaging, the owner often moves the built zip into `_archive/`.** If `P3CC-vX.Y-portable.zip` is missing from the repo root, look there before rebuilding.
 
 ## Repository & infrastructure
 
-- **GitHub:** https://github.com/nasermaher/p3-collect-comparative. The repo is **public**, so nothing confidential may ever be committed. The branch is `main`, and local `main` tracks `origin/main`, so a plain `git push` works.
-- **CI:** GitHub Actions `.github/workflows/python-app.yml`, added by the owner from the GitHub website. It runs on push/PR to `main` with Python 3.10: flake8 syntax/undefined-name check, then `pytest`. The owner may add commits on GitHub directly, so **fetch before pushing**.
+- **GitHub:** https://github.com/nasermaher/p3-collect-comparative. The repo is **public**, so nothing confidential may ever be committed. The branch is `main` (the local branch was renamed from `master` on 2026-10-14), and local `main` tracks `origin/main`, so a plain `git push` works. The repo description and topics (python, tkinter, pyinstaller, excel, windows-desktop, card-issuance) are set. Both READMEs open with an English | العربية language switcher and include `git clone` instructions.
+- **CI:** GitHub Actions `.github/workflows/python-app.yml`, added by the owner from the GitHub website. It runs on push/PR to `main` with Python 3.10: flake8 syntax/undefined-name check, then `pytest`. The owner may add commits on GitHub directly (the workflow itself, and the deletion of `error.jpg`, were made on the website), so **fetch before pushing**. If a push is rejected, inspect the remote commit and rebase onto it. Never force-push over it.
 - **`_archive/`** is the owner's private folder (old zips, chat logs). It's gitignored, and it was purged from history with a rewrite and force-push (2026-10-14). Never commit or package it.
 - **Repo contents are project files only.** On 2026-10-14 the scratch and working files `test.py`, `handoff.txt` (an old session handoff), `gemini-audit.md` (an external audit transcript) and `P3cc_prd.md` (the original GUI/portability plan, now implemented) were moved out of the repo into `_archive/`. Keep notes, transcripts and experiments there, not in the repo.
 - **Gitignored runtime files:** `settings.json`, `field_map.json`, `field_map.*.json` (backups), `field_map.tmp`, `p3cc.log`, `P3CC-v*-portable.zip`, `build/`, `dist/`.
+
+## Session log
+
+### 2026-10-14
+A full working session. Everything below is committed and pushed, and CI is green.
+1. **3.1:** whole-record `.p3` processing (embedded CR/LF preserved byte-for-byte), record layout checks, logged removal of lines outside records, and the output named `<first source>_processed.p3`.
+2. **3.2:** user-managed profiles in `field_map.json` v2, the Manage Profiles dialog, `debit-cards` as the only default, most-specific detection, automatic migration of old files and Import…, visible `field_map.json` errors, Test with Excel File, and tag validation.
+3. **Docs:** both READMEs gained "What's new" for 3.1 and 3.2 and "Rules for editing profiles" (what reaches the card machines). This file was created and is imported by `CLAUDE.md`.
+4. **GitHub:** the repo was published, with its description, topics and README language links. `_archive/` was ignored and purged from history (force-push, so all commit IDs changed). The local branch was renamed to `main`. The owner added CI and deleted `error.jpg` from the website. The non-project files were moved to `_archive/`.
+5. **Release v3.2** was published with the portable zip. The tag was then moved to the cleaned-up commit `89675da`, and the asset was rebuilt from it and replaced.
+6. **Delivered to the client:** the 3.1 and 3.2 portable zips. The owner and client tested 3.1, and the owner tested 3.2, on real files. Open question still pending from the client: whether a **32-bit** build is needed (see Ideas below).
 
 ## Release history
 
