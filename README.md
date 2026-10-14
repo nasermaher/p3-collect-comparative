@@ -20,7 +20,7 @@ The program is structured into these Python modules (source/dev mode only — no
 
 ## What's new in 3.2
 
-- **Card profiles are now fully managed from the app.** A profile is a card type, for example `debit-cards`. Each one has a name, the Excel columns that identify it, the card-ID column, and its fields. All of this is stored in `field_map.json` and edited in the new **Manage Profiles** window (it replaces Manage Fields). You can add, rename or delete card types without a new program version.
+- **Card profiles are now fully managed from the app.** A profile is a card type, for example `debit-cards`. Each one has a name, the Excel columns that identify it, the card-ID column, and its fields. All of this is stored in `field_map.json` and edited in the new **Manage Profiles** window (it replaces Manage Fields). You can add, rename or delete card types without a new program version. Before editing, read [Rules for editing profiles](#rules-for-editing-profiles-read-before-saving-any-change): some edits change the output that the card machines read.
 - **Default profile is now `debit-cards`.** It replaces `classic` and covers all debit cards. It is identified by the `Card No` column. The `yalla` and `zamalek` profiles are retired.
 - **Most specific profile wins.** When an Excel sheet matches more than one profile, the profile with the most identifying columns is chosen, whatever its position in the list. If two profiles match equally, the run stops with a clear message instead of guessing.
 - **Test with Excel File.** In Manage Profiles, pick an Excel file to see which profile it selects and which field columns are missing, before running a batch.
@@ -91,6 +91,54 @@ Everything is edited from the GUI, not in code:
 6. **Save & Close** checks everything first: no duplicate names, no two profiles with the same identifying columns, a card-ID column wherever identifying columns are set. Only then does it write `field_map.json` next to the exe. Changes take effect on the next Run, with no restart needed.
 
 `field_map.json` can also be edited by hand (save it as UTF-8). If it can't be read, the app tells you why and leaves the file as it is. Manage Profiles then offers to reset it, keeping a backup copy.
+
+## Rules for editing profiles (read before saving any change)
+
+The card machines read P3CC's output file. Some profile edits change that output, so the machine's own settings must match them exactly. Follow these rules for every change.
+
+#### What reaches the machine, and what doesn't
+
+| Setting | Appears in the output file? | Effect of a change |
+|---|---|---|
+| Field **tags**, their **order**, their **values** | **Yes** | The machine's profile must be changed to match, **at the same time** |
+| Profile **name** | No (only in the log and results panel) | None on the machine |
+| **Identifying columns**, **card-ID column** | No | Only which profile is chosen, and which Excel row is matched to each card |
+
+Each card record in the output looks like this, all on one line:
+```
+...#END#<arabic>NAME<national>29001011234567<postoffice>...<IssuanceDate>2026-05-20<cpf>1<EOR>
+```
+
+#### Tags
+- Copy each tag **exactly** as it is configured on the machine, including the angle brackets: `<IssuanceDate>`. Tags are case-sensitive: `<IssuanceDate>`, `<issuancedate>` and `<Issuance Date>` are three different tags to the machine.
+- Don't put spaces inside a tag.
+- Don't add `<cpf>1<EOR>`. P3CC adds it automatically at the end of every card.
+- The **order** of the fields in Manage Profiles is the order written to the output. Use **Move Up** / **Move Down** to match the order the machine expects.
+- A tag the machine needs but that has no Excel data still has to be listed. Use the value source **Empty (no value)**.
+
+#### Profile names
+- Use short English names in lowercase, with words joined by `-`, describing the card type: `debit-cards`, `prepaid-cards`, `payroll-cards`.
+- Don't rename a profile without a reason. The name doesn't change the output, but it is what everyone sees in results and logs.
+
+#### Excel column names
+- Type column names **exactly** as they appear in the Excel header. Spaces at the start or end are ignored. Capital letters and Arabic letter forms are not: `الإسم` and `الاسم` are different. If a customer's sheets spell a column in more than one way, list all spellings separated by commas (a fallback list). The first one found is used.
+- **Don't name a column so that it starts with `Col` or `Unn`** (for example `Color` or `Collection Date`). P3CC drops such columns when loading Excel, because those prefixes belong to blank auto-generated columns.
+- **Identifying columns:** choose columns that only this card type's sheet has. If two profiles' sheets share the same columns, add a column unique to each. Otherwise the run stops with "matches several profiles equally".
+
+#### The card-ID column
+- In Excel, the card-number column must be formatted as **Text**. Excel stores numbers with only 15 significant digits, so a 16-digit card number stored as a Number loses its last digit (`1234567890123456` becomes `1234567890123450`). P3CC then can't match it, and the card is skipped.
+
+#### Values
+- The output file uses Arabic Windows encoding (`cp1256`). Characters it can't represent are written as `?`. For Arabic text fields, choose the transform **Arabic character normalize**. It also converts Eastern Arabic digits (٠١٢…) to 0-9.
+- **Strip blank / N-A values** removes extra spaces around values such as national ID numbers.
+
+#### Step by step, for every change
+1. **Back up:** copy the current `field_map.json` (next to `P3CC.exe`) and add the date to the copy's name.
+2. Make the change in **Manage Profiles**, then **Save & Close**.
+3. **Test with Excel File…** on a real sheet. Check that the right profile is chosen and no field columns are missing.
+4. Run a **small batch** and load the output on the machine. Confirm it reads every field correctly.
+5. **Every PC that runs P3CC has its own `field_map.json`.** Copy the same final file next to `P3CC.exe` on each of them, or load it with **Import…**. Profiles that differ between PCs produce different output.
+6. Keep a short change log: date, what changed, and the matching change on the machine.
 
 ## Configuration for developers (`config.py`)
 
