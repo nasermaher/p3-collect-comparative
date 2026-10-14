@@ -11,6 +11,7 @@ This is the record of what was built, why, and the constraints behind it, so a f
 - **Test before commit.** Implement, run `pytest`, rebuild the package, then wait for the owner to test on real files (and sometimes the client too) before committing. Commit when the owner confirms.
 - **Every release:** bump `config.VERSION`, add a "What's new in X.Y" section to both READMEs, then run `toolkit.bat package`. That runs the tests, builds the exe and creates `P3CC-vX.Y-portable.zip`. The READMEs are bundled into the exe (in-app Help), so rebuild after any README change.
 - The packaged zip goes to the client: the whole `dist/P3CC` folder, never the `.exe` alone.
+- **GitHub Release per version:** after the owner confirms and the commits are pushed, rebuild the zip from that exact HEAD. Then create release `vX.Y` on that commit with the zip attached and bilingual notes (English plus an Arabic summary, including upgrade steps). `gh` isn't installed, so this goes through the GitHub REST API using the token from `git credential fill`, which is piped in and never printed. Afterwards, check that the downloaded asset's SHA-256 matches the local zip. Released so far: **v3.2** (2026-10-14).
 
 ## Repository & infrastructure
 
