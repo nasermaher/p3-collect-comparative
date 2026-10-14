@@ -19,6 +19,7 @@ import field_map_store
 from exceptions import ProfileDetectionError, SourceFilesError, MissingColumnError
 from config import (
     CARD_FILE_EXT,
+    OUTPUT_SUFFIX,
     CARD_MARKER,
     END_MARKER,
     SERIAL_LEN,
@@ -295,14 +296,14 @@ def select_file(title: str = 'Select file', folder: str = '.') -> str | None:
 
 # ── Source file discovery ─────────────────────────────────────────────────────
 
-def get_source_files(p3_root: Path, output_file: Path) -> list[str]:
+def get_source_files(p3_root: Path) -> list[str]:
     """
-    Return a list of .p3 source file names in p3_root,
-    excluding the output file to prevent it being read as input.
+    Return a list of .p3 source file names in p3_root, excluding any
+    previous output file (name ending with OUTPUT_SUFFIX) so it's never
+    read as input.
 
     Args:
         p3_root:     Directory containing the .p3 source files.
-        output_file: The output .p3 path to exclude.
 
     Returns:
         List of file name strings (not full paths).
@@ -310,10 +311,15 @@ def get_source_files(p3_root: Path, output_file: Path) -> list[str]:
     Exits:
         raise SourceFilesError() if no source files are found.
     """
-    files = [f.name for f in p3_root.glob(f'*.{CARD_FILE_EXT}') if f != output_file]
+    files = [f.name for f in p3_root.glob(f'*.{CARD_FILE_EXT}') if not f.stem.endswith(OUTPUT_SUFFIX)]
     if not files:
         raise SourceFilesError(f'No .{CARD_FILE_EXT} source files found in {p3_root}')
     return files
+
+
+def output_path_for(p3_root: Path, files: list[str]) -> Path:
+    """Output path: the first source file's name + OUTPUT_SUFFIX, in the same folder."""
+    return p3_root / f'{Path(files[0]).stem}{OUTPUT_SUFFIX}.{CARD_FILE_EXT}'
 
 
 # ── Excel loader ──────────────────────────────────────────────────────────────

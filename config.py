@@ -10,6 +10,10 @@ VERSION = "3.1"
 ENCODING      = 'cp1256'
 CARD_FILE_EXT = 'p3'
 
+# Output file = first source file's name + this suffix (cards.p3 → cards_processed.p3).
+# Source files ending with it are skipped, so a previous run's output is never re-read.
+OUTPUT_SUFFIX = '_processed'
+
 # ── Binary markers (used when scanning .p3 source files) ─────────────────────
 
 CARD_MARKER: bytes = b'"%B'

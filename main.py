@@ -14,10 +14,11 @@ from typing import Callable, Optional
 import pandas as pd
 
 from exceptions import P3CCError
-from config import ENCODING, CARD_FILE_EXT, CARD_ID_START, CARD_ID_END, END_MARKER
+from config import ENCODING, CARD_ID_START, CARD_ID_END, END_MARKER
 from utils  import (
     select_file,
     get_source_files,
+    output_path_for,
     load_excel,
     detect_profile,
     build_text,
@@ -76,11 +77,11 @@ def run_pipeline(
     """
     p3_root = Path(p3_root)
 
-    p3_fileout = p3_root / (p3_root.name.replace(' ', '_') + '.' + CARD_FILE_EXT)
-    log.info('Output file   : %s', p3_fileout)
-
-    files = get_source_files(p3_root, p3_fileout)
+    files = get_source_files(p3_root)
     log.info('Source files  : %d file(s) found', len(files))
+
+    p3_fileout = output_path_for(p3_root, files)
+    log.info('Output file   : %s', p3_fileout)
 
     start_time = time.time()
 

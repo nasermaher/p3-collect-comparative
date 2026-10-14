@@ -134,21 +134,24 @@ def test_detect_profile_raises_missing_column_when_lookup_col_absent(monkeypatch
 # ── get_source_files ───────────────────────────────────────────────────────
 
 
-def test_get_source_files_lists_p3_files_excluding_output(tmp_path):
+def test_get_source_files_lists_p3_files_excluding_previous_output(tmp_path):
     (tmp_path / 'card1.p3').write_bytes(b'data')
     (tmp_path / 'card2.p3').write_bytes(b'data')
     (tmp_path / 'notes.txt').write_bytes(b'data')
-    output_file = tmp_path / 'output.p3'
-    output_file.write_bytes(b'previous run')
+    (tmp_path / 'card1_processed.p3').write_bytes(b'previous run')
 
-    files = utils.get_source_files(tmp_path, output_file)
+    files = utils.get_source_files(tmp_path)
 
     assert sorted(files) == ['card1.p3', 'card2.p3']
 
 
 def test_get_source_files_raises_when_none_found(tmp_path):
     with pytest.raises(SourceFilesError):
-        utils.get_source_files(tmp_path, tmp_path / 'output.p3')
+        utils.get_source_files(tmp_path)
+
+
+def test_output_path_for_uses_first_source_file_name(tmp_path):
+    assert utils.output_path_for(tmp_path, ['cards 01.p3', 'cards 02.p3']) == tmp_path / 'cards 01_processed.p3'
 
 
 # ── load_excel ─────────────────────────────────────────────────────────────

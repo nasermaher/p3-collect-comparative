@@ -23,6 +23,7 @@ The program is structured into these Python modules (source/dev mode only — no
 - **Fix — card records containing line breaks are no longer damaged.** A card record (`<8-digit serial>"%B<16-digit card ID><encrypted data>#END#`) can contain CR, LF or CRLF bytes inside its encrypted data. Version 3.0 treated each line break as the start of a new line, so everything before the last line break of such a record was silently left out of the output file. Version 3.1 reads each record as one whole block, from its serial number through `#END#`, and copies it byte-for-byte. The Excel data is added only after `#END#`.
 - **New — record layout checks.** Every record is checked for a valid header (8-digit serial, `"%B`, 16-digit card ID), consecutive serial numbers, a closing `#END#`, and signs of two records merged together. Problems are logged in `p3cc.log` with the file name and record number. Records with warnings are still written unchanged. Only an incomplete record (no `#END#`) is skipped.
 - **New — lines outside card records are removed and logged.** Blank lines, header/footer text or any other line that is not part of a card record is left out of the output. Each removal is logged with its file name, line number and size, never its content.
+- **Changed — output file name.** The output file is now named after the first source file with `_processed` added (e.g. `cards_01.p3` produces `cards_01_processed.p3`) instead of after the folder. All source files are still merged into this one file. Files ending in `_processed.p3` are skipped as input, so running the same folder again never re-reads a previous output. **Delete any old 3.0 output file (named after the folder, e.g. `My_P3_Files.p3`) from the folder before running 3.1**, otherwise it is read as a source file and its records are duplicated.
 - **Results panel:** shows two new counts, **Layout warnings** and **Lines discarded**. Both should be 0 for a clean batch. If either isn't, check `p3cc.log` for details.
 
 ## Features
@@ -45,7 +46,7 @@ The program is structured into these Python modules (source/dev mode only — no
 3. **Choose Folder…** — pick the folder containing your `.p3` source files.
 4. **Choose File…** — pick your Excel data file (`.xlsx` or `.xls`).
 5. Click **Run**. A progress bar tracks the batch; when it finishes you'll see a results summary and an **Open Output Folder** button.
-6. The output `.p3` file is written into the same folder as your source files, named after that folder (e.g. a folder named `My P3 Files` produces `My_P3_Files.p3`).
+6. The output `.p3` file is written into the same folder as your source files, named after the first source file with `_processed` added (e.g. `cards_01.p3` produces `cards_01_processed.p3`). All source files in the folder are still merged into this one output file.
 
 Use **Settings** to change the default folders the two file pickers open to. Use **Manage Fields** to add, edit, delete, or reorder which Excel column feeds which `.p3` tag for the active profile, without touching any code — see [Field mappings](#field-mappings-manage-fields-dialog) below.
 
