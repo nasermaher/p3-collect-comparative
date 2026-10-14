@@ -14,7 +14,7 @@ from typing import Callable, Optional
 import pandas as pd
 
 from exceptions import P3CCError
-from config import ENCODING, CARD_FILE_EXT, CARD_ID_START, CARD_ID_END, CARD_MARKER, END_MARKER
+from config import ENCODING, CARD_FILE_EXT, CARD_ID_START, CARD_ID_END, END_MARKER
 from utils  import (
     select_file,
     get_source_files,
@@ -22,6 +22,9 @@ from utils  import (
     detect_profile,
     build_text,
     get_resolved_field_map,
+    iter_records,
+    check_record,
+    record_serial,
 )
 from settings import get_app_dir
 
@@ -96,6 +99,8 @@ def run_pipeline(
     file_count       = 0
     total_card_count = 0
     skip_count       = 0
+    warning_count    = 0
+    discard_count    = 0
 
     log.info('Starting batch: %d file(s) to process', len(files))
 
@@ -108,44 +113,56 @@ def run_pipeline(
             file_name  = p3_root / filename
             file_count += 1
             line_count  = 0
-            card_id     = ''
+
+            prev_serial = None
+            discarded   = []   # (line_no, byte length) of lines outside any record
 
             with open(file_name, 'rb') as file_in:
 
-                for line in file_in:
+                # Each record is one whole card block — embedded CR/LF bytes in
+                # the encrypted data are kept intact (see utils.iter_records).
+                records = iter_records(file_in, on_discard=lambda n, line: discarded.append((n, len(line))))
+                for record in records:
+                    line_count += 1
 
-                    # ── Detect card ID ────────────────────────────────────
-                    if CARD_MARKER in line:
-                        card_id = line[CARD_ID_START:CARD_ID_END].decode(ENCODING)
-                        line_count += 1
+                    # ── Validate record layout ────────────────────────────
+                    problems = check_record(record, prev_serial)
+                    for problem in problems:
+                        log.warning('%s, record #%d: %s', filename, line_count, problem)
+                    if problems:
+                        warning_count += 1
+                    prev_serial = record_serial(record)
 
-                    # ── Strip line endings on END marker lines ────────────
-                    is_end = END_MARKER in line
-                    if is_end:
-                        line = line.rstrip(b'\r\n')
+                    if not record.endswith(END_MARKER):
+                        skip_count += 1
+                        continue
+
+                    card_id = record[CARD_ID_START:CARD_ID_END].decode(ENCODING)
 
                     # ── Append card data after END marker ─────────────────
-                    if is_end:
-                        try:
-                            excel_row = excel.loc[card_id]
+                    try:
+                        excel_row = excel.loc[card_id]
 
-                            # Resolve to Series if duplicate card IDs exist in Excel
-                            if isinstance(excel_row, pd.DataFrame):
-                                excel_row = excel_row.iloc[0]
+                        # Resolve to Series if duplicate card IDs exist in Excel
+                        if isinstance(excel_row, pd.DataFrame):
+                            excel_row = excel_row.iloc[0]
 
-                            # Build & write
-                            text = build_text(profile, excel_row, line_count, resolved_field_map)
+                        # Build & write
+                        text = build_text(profile, excel_row, line_count, resolved_field_map)
 
-                            # ── Write source line (CRLF-stripped) then the injected tags ──
-                            file_out.write(line)
-                            file_out.write(text.encode(ENCODING, errors='replace'))
+                        # ── Write the record untouched, then the tags right after #END# ──
+                        file_out.write(record)
+                        file_out.write(text.encode(ENCODING, errors='replace'))
 
-                        except KeyError as e:
-                            # Catches missing card_id in Excel.loc or missing column in build_text (via resolve_col)
-                            log.warning('Data lookup error for card %s: %s — skipping.', card_id, e)
-                            skip_count += 1
-                            continue # Skip this card and continue with the next line/card
+                    except KeyError as e:
+                        # Catches missing card_id in Excel.loc or missing column in build_text (via resolve_col)
+                        log.warning('Data lookup error for card %s: %s — skipping.', card_id, e)
+                        skip_count += 1
 
+            # Content is deliberately not logged — it may be confidential card data.
+            for line_no, size in discarded:
+                log.warning('%s, line %d: discarded %d byte(s) outside any card record', filename, line_no, size)
+            discard_count    += len(discarded)
             total_card_count += line_count
 
             if progress_callback is not None:
@@ -155,6 +172,8 @@ def run_pipeline(
     log.info('─' * 55)
     log.info('Files processed : %d', file_count)
     log.info('Cards read : %d, Cards written : %d, Cards skipped : %d', total_card_count, total_card_count - skip_count, skip_count)
+    log.info('Records with layout warnings : %d', warning_count)
+    log.info('Lines discarded outside records : %d', discard_count)
     log.info('Elapsed time    : %.4f seconds', elapsed)
     log.info('─' * 55)
 
@@ -162,6 +181,8 @@ def run_pipeline(
         'file_count': file_count,
         'total_card_count': total_card_count,
         'skip_count': skip_count,
+        'warning_count': warning_count,
+        'discard_count': discard_count,
         'elapsed': elapsed,
         'output_path': p3_fileout,
     }

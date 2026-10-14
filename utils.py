@@ -5,7 +5,8 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 import logging
-from typing import Callable
+import re
+from typing import Callable, Iterable, Iterator
 
 import pandas as pd
 import xlrd  # noqa: F401 — pandas.read_excel() only imports this lazily for .xls
@@ -18,6 +19,11 @@ import field_map_store
 from exceptions import ProfileDetectionError, SourceFilesError, MissingColumnError
 from config import (
     CARD_FILE_EXT,
+    CARD_MARKER,
+    END_MARKER,
+    SERIAL_LEN,
+    CARD_ID_START,
+    CARD_ID_END,
     PROFILE_SIGNATURES,
     NORMALIZATION_TABLE,
 )
@@ -85,6 +91,102 @@ def get_resolved_field_map() -> dict:
             for f in fields
         ]
     return resolved
+
+
+# ── Card record assembly & validation ─────────────────────────────────────────
+# A .p3 card record is one logical line: <serial>"%B<card ID><encrypted data>#END#.
+# The encrypted data may itself contain CR, LF or CRLF bytes, so physical lines
+# are NOT records — they're re-joined here into one block, byte-for-byte.
+
+_HEADER_PATTERN = (rb'\d{%d}' % SERIAL_LEN) + re.escape(CARD_MARKER) + (rb'\d{%d}' % (CARD_ID_END - CARD_ID_START))
+_HEADER_RE          = re.compile(_HEADER_PATTERN)
+_EMBEDDED_HEADER_RE = re.compile(rb'[\r\n]' + _HEADER_PATTERN)
+
+
+def _strip_eol(chunk: bytes) -> bytes:
+    """Remove exactly one trailing line terminator (CRLF or LF), nothing else."""
+    if chunk.endswith(b'\r\n'):
+        return chunk[:-2]
+    if chunk.endswith(b'\n'):
+        return chunk[:-1]
+    return chunk
+
+
+def iter_records(
+    lines: Iterable[bytes],
+    on_discard: Callable[[int, bytes], None] | None = None,
+) -> Iterator[bytes]:
+    """
+    Re-assemble physical lines (as yielded by iterating a file opened 'rb')
+    into whole card records.
+
+    A record starts at a line beginning with a valid header and runs through
+    the first line ending in END_MARKER, so CR/LF bytes inside the encrypted
+    data never split it. Each yielded record is the exact original bytes,
+    minus the single line terminator after its '#END#'.
+
+    Any line outside a record (blank, header/footer text, junk between
+    records) is dropped and reported via on_discard(line_no, line), line_no
+    being the 1-based physical (LF-separated) line number. A trailing record
+    with no '#END#' is still yielded, unchanged, so check_record() can report
+    it as incomplete.
+    """
+    buf: list[bytes] = []
+    for line_no, line in enumerate(lines, start=1):
+        if not buf and not _HEADER_RE.match(line):
+            if on_discard is not None:
+                on_discard(line_no, line)
+            continue
+        buf.append(line)
+        if _strip_eol(line).endswith(END_MARKER):
+            yield _strip_eol(b''.join(buf))
+            buf = []
+    if buf:
+        yield b''.join(buf)
+
+
+def record_serial(record: bytes) -> int | None:
+    """Return the record's leading serial number, or None if it isn't numeric."""
+    serial = record[:SERIAL_LEN]
+    return int(serial) if len(serial) == SERIAL_LEN and serial.isdigit() else None
+
+
+def check_record(record: bytes, prev_serial: int | None) -> list[str]:
+    """
+    Check a record against the expected layout. Returns a list of
+    human-readable problems (empty if the record looks well-formed).
+    Never inspects or reports the encrypted payload itself.
+
+    Args:
+        record:       One record as yielded by iter_records().
+        prev_serial:  Serial of the previous record in the same file, or None
+                      for the first record (no sequence check then).
+    """
+    problems = []
+
+    if not _HEADER_RE.match(record):
+        problems.append(
+            f'malformed header {record[:CARD_ID_END]!r} — expected '
+            f'{SERIAL_LEN}-digit serial + {CARD_MARKER.decode()} + '
+            f'{CARD_ID_END - CARD_ID_START}-digit card ID'
+        )
+    else:
+        serial = record_serial(record)
+        if prev_serial is not None and serial != prev_serial + 1:
+            problems.append(f'serial {serial:0{SERIAL_LEN}d} does not follow {prev_serial:0{SERIAL_LEN}d}')
+
+    if not record.endswith(END_MARKER):
+        problems.append(f'missing {END_MARKER.decode()} at end — record is incomplete')
+
+    end_count = record.count(END_MARKER)
+    if end_count > 1:
+        problems.append(f'{END_MARKER.decode()} appears {end_count} times — possibly merged records')
+
+    if _EMBEDDED_HEADER_RE.search(record):
+        problems.append('another record header found after a line break — possibly a missing '
+                        f'{END_MARKER.decode()} (merged records)')
+
+    return problems
 
 
 # ── Row resolver ──────────────────────────────────────────────────────────────

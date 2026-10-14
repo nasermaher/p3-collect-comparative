@@ -513,6 +513,8 @@ class P3CCApp(tk.Tk):
             f"Cards read      : {result['total_card_count']}\n"
             f"Cards written   : {result['total_card_count'] - result['skip_count']}\n"
             f"Cards skipped   : {result['skip_count']}\n"
+            f"Layout warnings : {result['warning_count']} (details in p3cc.log)\n"
+            f"Lines discarded : {result['discard_count']} (details in p3cc.log)\n"
             f"Elapsed time    : {result['elapsed']:.2f} seconds\n"
             f"Output file     : {result['output_path']}"
         )

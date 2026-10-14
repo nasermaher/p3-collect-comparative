@@ -15,10 +15,14 @@ CARD_FILE_EXT = 'p3'
 CARD_MARKER: bytes = b'"%B'
 END_MARKER: bytes  = b'#END#'
 
-# ── Card ID byte slice offsets inside a CARD_MARKER line ─────────────────────
+# ── Card record layout ────────────────────────────────────────────────────────
+# Every record starts with a fixed header and ends with END_MARKER:
+#   <8-digit serial>"%B<16-digit card ID><encrypted data, may contain CR/LF>#END#
+# The encrypted data is copied byte-for-byte and never altered.
 
-CARD_ID_START = 11
-CARD_ID_END   = 27
+SERIAL_LEN    = 8
+CARD_ID_START = 11   # SERIAL_LEN + len(CARD_MARKER)
+CARD_ID_END   = 27   # 16-digit card ID
 
 # ── Profile signatures ────────────────────────────────────────────────────────
 # Maps profile name → dictionary containing:

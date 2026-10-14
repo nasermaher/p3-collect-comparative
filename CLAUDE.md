@@ -57,9 +57,14 @@ Different customers' Excel exports have different columns. A "profile" (`yalla`,
 
 Files are read and written as raw bytes (not text) because encoding (`cp1256`) must be controlled precisely and markers are matched as byte sequences:
 
-1. Scan each line for `CARD_MARKER` (`"%B`) — when found, slice bytes `[11:27]` and decode as the card ID.
-2. Scan for `END_MARKER` (`#END#`) — when found, strip the line's trailing CRLF, look up the card ID in the Excel DataFrame (indexed on `lookup_col` for O(1) lookup), and call `build_text()` to render the tagged field string for that profile, which gets written right after the CRLF-stripped `#END#` line (the output file is opened `'ab+'`, so every write lands at end-of-file — no `seek` is needed or used).
-3. A `KeyError` (card ID not in Excel, or a required column missing) skips that card with a warning rather than aborting the whole batch.
+A card record is one *logical* line: `<8-digit serial>"%B<16-digit card ID><encrypted data>#END#`. The encrypted data can contain bare CR, bare LF or CRLF bytes, so physical lines are **not** records and the encrypted bytes must never be altered.
+
+1. `utils.iter_records()` re-joins physical lines into whole records. A record runs from a line that starts with a valid header through the first line ending in `#END#`, so line breaks inside the encrypted data never split it. Only the single line terminator after `#END#` is removed. Lines outside any record (blank lines, header/footer text, junk) are dropped. Each dropped line is logged with its physical line number and byte length, never its content, and the total is returned as `discard_count`.
+2. `utils.check_record()` validates the layout (header shape, consecutive serials, `#END#` at end, signs of merged records) and logs warnings to `p3cc.log`. Records with warnings are still processed. Only incomplete records (no `#END#`) are skipped. The count shows up as `warning_count` in the summary and in the GUI.
+3. The card ID is `record[11:27]`. It is looked up in the Excel DataFrame (indexed on `lookup_col` for O(1) lookup), and `build_text()`'s tags are written directly after `#END#` as a continuation of the same line. The output file is opened `'ab+'`.
+4. A `KeyError` (card ID not in Excel, or a required column missing) skips that card with a warning rather than aborting the whole batch.
+
+`tests/test_records.py` covers this with synthetic records (fake card IDs and payloads with embedded CR/LF), including an end-to-end `run_pipeline` byte-for-byte check.
 
 ### Arabic text handling
 
