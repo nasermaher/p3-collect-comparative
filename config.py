@@ -1,10 +1,10 @@
 # ── config.py ─────────────────────────────────────────────────────────────────
-# All constants and field definitions for P3CC.  - Version 3.0
+# All constants and field definitions for P3CC.  - Version 3.1
 # Edit this file to: change encoding, add profiles, or modify field mappings.
 # No logic lives here — only data.
 # ──────────────────────────────────────────────────────────────────────────────
 
-VERSION = "3.0"
+VERSION = "3.1"
 # ── File & encoding constants ─────────────────────────────────────────────────
 
 ENCODING      = 'cp1256'

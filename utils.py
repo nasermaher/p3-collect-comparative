@@ -1,5 +1,5 @@
 # ── utils.py ──────────────────────────────────────────────────────────────────
-# Pure helper functions for P3CC.  - Version 3.0
+# Pure helper functions for P3CC.  - Version 3.1
 # No I/O, no sys.exit(), no file paths — only data transformations.
 # Every function here is independently testable.
 # ──────────────────────────────────────────────────────────────────────────────

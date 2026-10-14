@@ -1,5 +1,5 @@
 # ── main.py ───────────────────────────────────────────────────────────────────
-# P3CC — Card Data Collect-Comparative Tool - Version 3.0
+# P3CC — Card Data Collect-Comparative Tool - Version 3.1
 # Processing pipeline + a minimal console entry point for developer debugging.
 # Contains no business logic — all logic lives in utils.py and config.py.
 # The GUI entry point (app.py / gui.py) imports run_pipeline() directly.

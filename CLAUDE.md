@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-P3CC (P3 Collect-Comparative) is a Windows desktop utility that merges cardholder data from an Excel spreadsheet into `.p3` card-issuance files. It scans `.p3` source files for card-ID markers, looks up the matching Excel row, and injects tagged fields (e.g. `<arabic>`, `<national>`, `<barcode>`) into the output before the `#END#` marker of each card record.
+P3CC (P3 Collect-Comparative) is a Windows desktop utility that merges cardholder data from an Excel spreadsheet into `.p3` card-issuance files. It scans `.p3` source files for card-ID markers, looks up the matching Excel row, and injects tagged fields (e.g. `<arabic>`, `<national>`, `<barcode>`) into the output directly after the `#END#` marker of each card record, as a continuation of the same line.
 
 It ships as a Tkinter GUI (`app.py`/`gui.py`), packaged with PyInstaller into a standalone `P3CC.exe` so end users (non-technical staff, machines without Python installed) never touch a terminal.
 
