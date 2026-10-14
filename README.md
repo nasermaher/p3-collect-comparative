@@ -1,8 +1,11 @@
 # P3CC (P3 Collect-Comparative)
+Developed by Eng. Mahmoud Al-Ansary
+"ddph.it@egyptpost.org"
+
 
 ## Overview
 
-P3CC is a Windows desktop tool that merges cardholder data from an Excel spreadsheet into `.p3` card-issuance files. It scans `.p3` source files for card-ID markers, looks up the matching Excel row, and injects tagged fields (cardholder name, national ID, mobile number, and other profile-specific data) into the output before the `#END#` marker of each card record.
+P3CC is a Windows desktop tool that merges cardholder data from an Excel spreadsheet into `.p3` card-issuance files. It scans `.p3` source files for card-ID markers, looks up the matching Excel row, and injects tagged fields (cardholder name, national ID, mobile number, and other profile-specific data) into the output directly after the `#END#` marker of each card record, as a continuation of the same line.
 
 It ships as a Tkinter GUI packaged into a standalone `P3CC.exe` (via PyInstaller) — end users need **no Python installed** and never touch a terminal.
 
@@ -15,6 +18,13 @@ The program is structured into these Python modules (source/dev mode only — no
 - `settings.py` / `field_map_store.py`: load and save the user-editable `settings.json` (remembered folders) and `field_map.json` (Excel-column → `.p3`-tag mappings) next to the running exe.
 - `exceptions.py`: custom exception classes for specific error conditions, for precise error handling and clearer debugging.
 
+## What's new in 3.1
+
+- **Fix — card records containing line breaks are no longer damaged.** A card record (`<8-digit serial>"%B<16-digit card ID><encrypted data>#END#`) can contain CR, LF or CRLF bytes inside its encrypted data. Version 3.0 treated each line break as the start of a new line, so everything before the last line break of such a record was silently left out of the output file. Version 3.1 reads each record as one whole block, from its serial number through `#END#`, and copies it byte-for-byte. The Excel data is added only after `#END#`.
+- **New — record layout checks.** Every record is checked for a valid header (8-digit serial, `"%B`, 16-digit card ID), consecutive serial numbers, a closing `#END#`, and signs of two records merged together. Problems are logged in `p3cc.log` with the file name and record number. Records with warnings are still written unchanged. Only an incomplete record (no `#END#`) is skipped.
+- **New — lines outside card records are removed and logged.** Blank lines, header/footer text or any other line that is not part of a card record is left out of the output. Each removal is logged with its file name, line number and size, never its content.
+- **Results panel:** shows two new counts, **Layout warnings** and **Lines discarded**. Both should be 0 for a clean batch. If either isn't, check `p3cc.log` for details.
+
 ## Features
 
 - **Portable, no-install packaging**: runs as `dist/P3CC/P3CC.exe` on any Windows machine, no Python required. Distribute the whole `P3CC` folder as a unit, not just the `.exe`.
@@ -23,7 +33,9 @@ The program is structured into these Python modules (source/dev mode only — no
 - **Arabic character normalization**: normalizes Eastern Arabic-Indic digits and a couple of special codepoints for `cp1256`-safe output.
 - **User-editable field mappings**: the GUI's "Manage Fields" dialog lets you add/edit/delete/reorder Excel-column → `.p3`-tag mappings per profile — no code change needed when a customer adds or drops an Excel column.
 - **Remembered folders**: the Settings dialog remembers your last-used source and Excel folders.
-- **Progress tracking and results panel**: a progress bar during processing, then a summary (files processed, cards read/written/skipped, elapsed time, output path) with an "Open Output Folder" button.
+- **Card data integrity**: each card record is copied byte-for-byte as one block, including any line breaks inside its encrypted data. The Excel data is appended right after `#END#`.
+- **Record layout checks**: malformed headers, serial-number gaps, missing `#END#` and merged records are reported in `p3cc.log`.
+- **Progress tracking and results panel**: a progress bar during processing, then a summary (files processed, cards read/written/skipped, layout warnings, lines discarded, elapsed time, output path) with an "Open Output Folder" button.
 - **Logging**: detailed logging to `p3cc.log` next to the app for traceability and debugging.
 
 ## How to Use (end users)
