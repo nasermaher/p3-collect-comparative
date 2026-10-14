@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Project history, past decisions, the owner's working agreements and open ideas are in `PROJECT_HISTORY.md`. Read it before starting new work:
+
+@PROJECT_HISTORY.md
+
 ## Overview
 
 P3CC (P3 Collect-Comparative) is a Windows desktop utility that merges cardholder data from an Excel spreadsheet into `.p3` card-issuance files. It scans `.p3` source files for card-ID markers, looks up the matching Excel row, and injects tagged fields (e.g. `<arabic>`, `<national>`, `<barcode>`) into the output directly after the `#END#` marker of each card record, as a continuation of the same line.
@@ -21,7 +25,7 @@ run.bat                                     # dev-only: activates .venv then run
 toolkit.bat                                 # menu-driven wrapper: run/test/check/setup/package (see toolkit.bat itself)
 ```
 
-There is no linter or CI config in this repo. Unit tests live in `tests/` (pytest, covering `utils.py`'s pure functions, `settings.py`, `field_map_store.py` (validation, migration, error handling), and the record pipeline) — run with `pytest` after `pip install -r requirements-dev.txt`. `test.py` at the repo root is unrelated: a Python-Arabic-codepoint scratch file, not a real test. Neither the tests nor `python app.py` exercise the actual `.p3`/Excel I/O end-to-end — verify that manually against sample data (see `p3_PILOT HOME DELIVERY 20-05-2026/` for example input files) before shipping a change to `main.py`'s pipeline loop.
+CI: GitHub Actions (`.github/workflows/python-app.yml`) runs on every push/PR to `main` with Python 3.10. It runs flake8 (syntax errors and undefined names only, so other lint is advisory) and then `pytest`. There is no local linter config. Unit tests live in `tests/` (pytest, covering `utils.py`'s pure functions, `settings.py`, `field_map_store.py` (validation, migration, error handling), and the record pipeline). Run them with `pytest` after `pip install -r requirements-dev.txt`. `tests/test_records.py` includes a synthetic end-to-end `run_pipeline` byte-for-byte check. `test.py` at the repo root is unrelated: a Python-Arabic-codepoint scratch file, not a real test. Real `.p3`/Excel data is confidential and never in the repo. Tests use fake records only, and changes to the pipeline are verified by the owner on real files before committing.
 
 ## Architecture
 
